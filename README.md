@@ -107,12 +107,15 @@ Before running CI/CD, create these secrets in the respective tools:
 
 ### GitHub
 - **Personal Access Token** with `repo` scope — used by Jenkins to clone the repo.
+- **Webhook** — see [`docs/webhook-setup.md`](docs/webhook-setup.md) to auto-trigger CI/CD on push.
 
 ### Kubernetes (Kind)
 - No cloud secrets needed for local Kind clusters.
 - For production EKS: configure AWS credentials (`aws configure`) and update `kubeconfig_context` in `terraform/variables.tf`.
 
 ## CI/CD Pipeline (Jenkins)
+
+Webhook setup guide: [`docs/webhook-setup.md`](docs/webhook-setup.md)
 
 The Jenkinsfile defines 9 stages:
 1. Checkout
