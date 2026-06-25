@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+# REQUIRED SECRETS (set as env vars or Docker logged in):
+#   - DOCKER_REGISTRY  (default: nayannyk) — Docker Hub username/org
+#   - Run `docker login` before pushing, or use Jenkins docker-hub-credentials
+#
 IMAGE_TAG=${1:-latest}
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-nayannyk}
 

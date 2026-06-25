@@ -1,3 +1,13 @@
+/*
+ * REQUIRED JENKINS CREDENTIALS:
+ *   - docker-hub-credentials (Username with password) — Docker Hub push access
+ *   - github-credentials        (Secret text / GitHub PAT) — SCM checkout
+ *
+ * REQUIRED JENKINS CONFIG:
+ *   - Update the 'to' email in the post section (team@example.com → your team)
+ *   - Pipeline auth token: snake-game-pipeline-token (set in job config)
+ */
+
 pipeline {
     agent any
 

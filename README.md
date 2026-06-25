@@ -88,6 +88,30 @@ kubectl rollout status deployment/snake-backend -n snake-game
 kubectl rollout status deployment/snake-frontend -n snake-game
 ```
 
+## Prerequisites — Secrets & Credentials
+
+Before running CI/CD, create these secrets in the respective tools:
+
+### Jenkins (Manage Jenkins → Credentials)
+| ID | Type | Purpose |
+|---|---|---|
+| `docker-hub-credentials` | Username with password | Push images to Docker Hub |
+| `github-credentials` | Secret text (GitHub PAT) | Checkout code from GitHub |
+| `team@example.com` | (update in Jenkinsfile) | Email notifications on build |
+
+### Jenkins (pipeline config)
+- **Auth Token**: `snake-game-pipeline-token` — used for triggering the pipeline via webhook.
+
+### Docker Hub
+- Account with push access to `nayannyk/snake-backend` and `nayannyk/snake-frontend` repos.
+
+### GitHub
+- **Personal Access Token** with `repo` scope — used by Jenkins to clone the repo.
+
+### Kubernetes (Kind)
+- No cloud secrets needed for local Kind clusters.
+- For production EKS: configure AWS credentials (`aws configure`) and update `kubeconfig_context` in `terraform/variables.tf`.
+
 ## CI/CD Pipeline (Jenkins)
 
 The Jenkinsfile defines 9 stages:

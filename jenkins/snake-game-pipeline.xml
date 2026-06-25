@@ -1,4 +1,14 @@
 <?xml version='1.1' encoding='UTF-8'?>
+<!--
+  REQUIRED JENKINS CREDENTIALS (Manage Jenkins → Credentials):
+    - ID: github-credentials (Secret text / GitHub PAT with repo scope)
+    - ID: docker-hub-credentials (Username with password for Docker Hub)
+
+  REQUIRED JENKINS CONFIG:
+    - Pipeline auth token: snake-game-pipeline-token
+      (set in job config → Build Triggers → Trigger builds remotely)
+    - Replace team@example.com in Jenkinsfile for email notifications
+-->
 <flow-definition plugin="workflow-job@2.40">
   <description>CI/CD Pipeline for Snake Game - builds, tests, and deploys to EKS</description>
   <keepDependencies>false</keepDependencies>

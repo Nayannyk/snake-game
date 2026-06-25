@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+# REQUIRED SECRETS / CONFIG:
+#   - KUBECONFIG               — path to kubeconfig (default: ~/.kube/config)
+#   - KIND_CLUSTER             — Kind cluster name (default: kind-workers)
+#   - DOCKER_REGISTRY          — Docker Hub username/org (default: nayannyk)
+#   - Images must be loaded or pulled by the Kind cluster
+#   - For EKS: set AWS credentials via env or ~/.aws/credentials
+#
 ENVIRONMENT=${1:-dev}
 IMAGE_TAG=${2:-latest}
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-nayannyk}
