@@ -1,0 +1,13 @@
+*.log
+.env
+*.db
+*.db-wal
+*.db-shm
+terraform/.terraform/
+terraform/**/.terraform/
+terraform/**/tfplan
+terraform/**/*.tfstate
+terraform/**/*.tfstate.backup
+node_modules/
+__pycache__/
+*.pyc

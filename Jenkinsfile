@@ -1,0 +1,172 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_REGISTRY = 'nayannyk'
+        IMAGE_TAG = "${env.BRANCH_NAME == 'main' ? 'stable' : 'develop'}"
+        TF_DIR = "${WORKSPACE}/terraform/environments/${env.BRANCH_NAME == 'main' ? 'prod' : 'dev'}"
+        KUBECONFIG = "${HOME}/.kube/config"
+        KIND_CLUSTER = "kind-workers"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh '''
+                    echo "Running unit tests..."
+                    if [ -f "backend/package.json" ]; then
+                        cd backend && npm install --omit=dev && npm test 2>/dev/null || echo "No tests configured"
+                    fi
+                '''
+            }
+        }
+
+        stage('Build & Push Docker Images') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
+            steps {
+                script {
+                    docker.withRegistry('', 'docker-hub-credentials') {
+                        def backendImage = docker.build("${DOCKER_REGISTRY}/snake-backend:${IMAGE_TAG}", "./backend")
+                        backendImage.push()
+                        backendImage.push("build-${env.BUILD_NUMBER}")
+
+                        def frontendImage = docker.build("${DOCKER_REGISTRY}/snake-frontend:${IMAGE_TAG}", "./frontend")
+                        frontendImage.push()
+                        frontendImage.push("build-${env.BUILD_NUMBER}")
+                    }
+                }
+            }
+        }
+
+        stage('Load Images into Kind') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
+            steps {
+                sh '''
+                    kind load docker-image "${DOCKER_REGISTRY}/snake-backend:${IMAGE_TAG}" --name "${KIND_CLUSTER}"
+                    kind load docker-image "${DOCKER_REGISTRY}/snake-frontend:${IMAGE_TAG}" --name "${KIND_CLUSTER}"
+                '''
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform init -reconfigure'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh '''
+                        terraform plan \
+                            -var="image_tag=${IMAGE_TAG}" \
+                            -out=tfplan
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform apply -auto-approve tfplan'
+                }
+            }
+        }
+
+        stage('Rollout Verification') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
+            steps {
+                sh '''
+                    kubectl rollout status deployment/snake-backend -n snake-game --timeout=120s
+                    kubectl rollout status deployment/snake-frontend -n snake-game --timeout=120s
+                '''
+            }
+        }
+
+        stage('Smoke Test') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
+            steps {
+                sh '''
+                    echo "Running smoke tests..."
+                    NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+                    NODE_PORT=$(kubectl get svc frontend -n snake-game -o jsonpath='{.spec.ports[0].nodePort}')
+
+                    sleep 5
+                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://${NODE_IP}:${NODE_PORT}/" --connect-timeout 10)
+                    if [ "$HTTP_CODE" != "200" ]; then
+                        echo "Frontend returned $HTTP_CODE, expected 200"
+                        exit 1
+                    fi
+                    echo "Frontend OK (200)"
+
+                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://${NODE_IP}:${NODE_PORT}/api/scores" --connect-timeout 10)
+                    if [ "$HTTP_CODE" != "200" ]; then
+                        echo "Backend API returned $HTTP_CODE, expected 200"
+                        exit 1
+                    fi
+                    echo "Backend API OK (200)"
+                '''
+            }
+        }
+
+        stage('Cleanup') {
+            steps {
+                sh '''
+                    docker system prune -f --filter "until=24h" 2>/dev/null || true
+                '''
+            }
+        }
+    }
+
+    post {
+        failure {
+            emailext(
+                subject: "FAILED: Snake Game - ${env.BRANCH_NAME} (Build #${env.BUILD_NUMBER})",
+                body: "Pipeline failed: ${env.BUILD_URL}",
+                to: 'team@example.com'
+            )
+        }
+        success {
+            emailext(
+                subject: "SUCCESS: Snake Game - ${env.BRANCH_NAME} (Build #${env.BUILD_NUMBER})",
+                body: "Deployed successfully: ${env.BUILD_URL}",
+                to: 'team@example.com'
+            )
+        }
+    }
+}

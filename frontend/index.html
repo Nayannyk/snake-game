@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Snake Royale</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="lobby" class="screen">
+      <div class="lobby-box">
+        <h1>Snake Royale</h1>
+        <p class="subtitle">Multiplayer Battle</p>
+        <input type="text" id="nameInput" placeholder="Enter your name" maxlength="20" autocomplete="off">
+        <div class="mode-select">
+          <label>Difficulty</label>
+          <div class="mode-btns">
+            <button class="mode-btn active" data-mode="easy">Easy</button>
+            <button class="mode-btn" data-mode="medium">Medium</button>
+            <button class="mode-btn" data-mode="hard">Hard</button>
+          </div>
+        </div>
+        <button id="playBtn" class="btn primary">Find Match</button>
+        <button id="soloBtn" class="btn secondary">Play Solo</button>
+        <div id="statusMsg" class="status-msg"></div>
+      </div>
+    </div>
+
+    <div id="gameScreen" class="screen hidden">
+      <div class="game-hud">
+        <div class="hud-left">
+          <div id="p1info" class="player-info">P1: <span id="p1score">0</span></div>
+          <div id="p2info" class="player-info">P2: <span id="p2score">0</span></div>
+        </div>
+        <div class="hud-center">
+          <span id="modeLabel">Medium</span>
+        </div>
+        <div class="hud-right">
+          <button id="leaveBtn" class="btn small">Leave</button>
+        </div>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="gameCanvas"></canvas>
+      </div>
+      <div id="joystickZone" class="joystick-zone">
+        <div id="joystick" class="joystick">
+          <div class="j-stick" id="jStick"></div>
+          <div class="j-arrow j-up"></div>
+          <div class="j-arrow j-down"></div>
+          <div class="j-arrow j-left"></div>
+          <div class="j-arrow j-right"></div>
+          <div class="j-center"></div>
+        </div>
+      </div>
+      <div id="notification" class="notification hidden"></div>
+    </div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

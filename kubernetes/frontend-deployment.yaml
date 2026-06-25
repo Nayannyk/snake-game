@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snake-frontend
+  namespace: snake-game
+  labels:
+    app: snake-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: snake-frontend
+  template:
+    metadata:
+      labels:
+        app: snake-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: nayannyk/snake-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "300m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: snake-game
+spec:
+  selector:
+    app: snake-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30080
+  type: NodePort
