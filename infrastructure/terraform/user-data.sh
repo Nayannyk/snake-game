@@ -3,14 +3,13 @@ set -euo pipefail
 
 # ---------------------------------------------------------------
 # Bootstrap script for the Kind K8s host
-# Installs: Docker, Kind, kubectl, Terraform, Helm, NGINX Ingress
-# Creates: Kind cluster with ingress controller + metrics-server
+# Installs: Docker, Kind, kubectl, Terraform, Helm
+# Creates: Kind cluster (ingress & metrics-server installed by CI/CD)
 # ---------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
 
 echo ">>> Updating system packages..."
 apt-get update -qq
-apt-get upgrade -y -qq
 
 echo ">>> Installing dependencies..."
 apt-get install -y -qq \
@@ -37,6 +36,7 @@ if ! command -v docker &>/dev/null; then
   apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
   usermod -aG docker ubuntu
   systemctl enable docker
+  systemctl start docker
 fi
 
 # ---------------------------------------------------------------
@@ -91,12 +91,19 @@ fi
 # Create Kind cluster
 # ---------------------------------------------------------------
 echo ">>> Waiting for Docker to be ready..."
+DOCKER_READY=false
 for i in $(seq 1 30); do
   if docker info &>/dev/null; then
+    DOCKER_READY=true
     break
   fi
   sleep 2
 done
+if [ "$DOCKER_READY" != "true" ]; then
+  echo "ERROR: Docker failed to start within 60 seconds"
+  journalctl -u docker --no-pager -n 20 || true
+  exit 1
+fi
 
 cd /home/ubuntu/snake-game
 KIND_CONFIG="deploy/k8s/kind-config.yaml"
@@ -113,27 +120,7 @@ echo ">>> Labeling worker nodes for ingress..."
 kubectl label node kind-worker ingress-ready=true --overwrite 2>/dev/null || true
 kubectl label node kind-worker2 ingress-ready=true --overwrite 2>/dev/null || true
 
-# ---------------------------------------------------------------
-# Install NGINX Ingress Controller
-# ---------------------------------------------------------------
-echo ">>> Installing NGINX Ingress Controller..."
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml
-
-echo ">>> Waiting for ingress controller pods to be ready..."
-kubectl wait --namespace ingress-nginx --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller --timeout=180s
-
-# ---------------------------------------------------------------
-# Install Metrics Server
-# ---------------------------------------------------------------
-echo ">>> Installing Metrics Server..."
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-kubectl patch deployment metrics-server -n kube-system --type='json' \
-  -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
-
-echo ">>> Waiting for metrics-server pods to be ready..."
-kubectl wait --namespace kube-system --for=condition=ready pod \
-  --selector=k8s-app=metrics-server --timeout=120s
+# Ingress controller & metrics-server installed by CI/CD workflow
 
 echo ">>> Bootstrap complete! Kind cluster is ready."
 echo ">>> Game will be available at http://<ec2-public-ip> once deployed."
