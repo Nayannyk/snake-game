@@ -53,7 +53,10 @@ jobs:
         id: cache
         uses: actions/cache@v4
         with:
-          path: ${{ env.TF_WORKING_DIR }}
+          path: |
+            ${{ env.TF_WORKING_DIR }}/terraform.tfstate
+            ${{ env.TF_WORKING_DIR }}/terraform.tfstate.backup
+            ${{ env.TF_WORKING_DIR }}/.terraform
           key: ${{ env.CACHE_KEY }}
 
       - name: Terraform Init
