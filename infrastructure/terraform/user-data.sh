@@ -109,11 +109,12 @@ cd /home/ubuntu/snake-game
 KIND_CONFIG="deploy/k8s/kind-config.yaml"
 
 echo ">>> Creating Kind cluster..."
+# Delete any stale cluster first (e.g., from a partial failed creation)
 if kind get clusters | grep -q "^kind$"; then
-  echo ">>> Kind cluster 'kind' already exists, skipping creation"
-else
-  su - ubuntu -c "cd /home/ubuntu/snake-game && kind create cluster --config ${KIND_CONFIG}"
+  echo ">>> Deleting stale Kind cluster..."
+  su - ubuntu -c "kind delete cluster"
 fi
+su - ubuntu -c "cd /home/ubuntu/snake-game && kind create cluster --config ${KIND_CONFIG}"
 
 # Label worker nodes for ingress
 echo ">>> Labeling worker nodes for ingress..."
