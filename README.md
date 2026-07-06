@@ -82,7 +82,7 @@ The [`full-deploy.yml`](.github/workflows/full-deploy.yml) workflow:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `environment` | `dev` | Environment label |
-| `instance_type` | `t2.micro` | EC2 instance type |
+| `instance_type` | `t2.medium` | EC2 instance type |
 | `key_name` | `""` | Existing EC2 KeyPair (empty = auto-generate) |
 
 ## CI/CD Pipelines
