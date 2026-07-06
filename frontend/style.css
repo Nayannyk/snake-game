@@ -117,7 +117,8 @@ body {
   flex: 1; display: flex; align-items: center; justify-content: center;
   width: 100%; overflow: hidden; position: relative;
 }
-#gameCanvas { display: block; image-rendering: pixelated; }
+#gameContainer { width: 100%; height: 100%; position: relative; }
+#gameContainer canvas { display: block; width: 100% !important; height: 100% !important; }
 
 /* ─── Joystick ─── */
 .joystick-zone {

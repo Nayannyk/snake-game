@@ -1,6 +1,5 @@
 const socket = io();
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const container = document.getElementById('gameContainer');
 
 const lobby = document.getElementById('lobby');
 const gameScreen = document.getElementById('gameScreen');
@@ -21,7 +20,6 @@ let playerId = null;
 let myColorIdx = 0;
 let world = { w: 60, h: 40 };
 let gameState = null;
-let animFrame = null;
 let myName = '';
 let opponentName = '';
 
@@ -66,7 +64,6 @@ function leaveGame() {
   lobby.classList.remove('hidden');
   gameScreen.classList.add('hidden');
   notification.classList.add('hidden');
-  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
   playBtn.disabled = false;
   playBtn.textContent = 'Find Match';
   soloBtn.disabled = false;
@@ -81,8 +78,6 @@ function resetUI() {
   statusMsg.textContent = '';
 }
 
-
-
 socket.on('joined', (data) => {
   playerId = data.playerId;
   myColorIdx = data.colorIdx;
@@ -90,6 +85,7 @@ socket.on('joined', (data) => {
   lobby.classList.add('hidden');
   gameScreen.classList.remove('hidden');
   statusMsg.textContent = '';
+  onResize();
 });
 
 socket.on('waiting', (data) => {
@@ -123,11 +119,10 @@ socket.on('gameState', (state) => {
       p2info.innerHTML = other ? (other.isBot ? `<span class="bot-badge">BOT</span> ${other.name}: <span id="p2score">${other.score}</span>` : `${other.name}: <span id="p2score">${other.score}</span>`) : '';
     }
   }
-  if (!animFrame) animFrame = requestAnimationFrame(render);
+  updateScene(state);
 });
 
 socket.on('gameOver', (data) => {
-  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
   const me = data.players.find(p => !p.isBot && p.colorIdx === myColorIdx) || data.players.find(p => p.colorIdx === myColorIdx);
   const other = data.players.find(p => p !== me);
   const hasBot = data.players.some(p => p.isBot);
@@ -267,140 +262,246 @@ document.addEventListener('keydown', (e) => {
   }
 })();
 
-// Render
-let eatAnim = [];
+// ─── Three.js 3D Scene ─────────────────────────────────────────────────────
 
-function render() {
-  if (!gameState) { animFrame = requestAnimationFrame(render); return; }
+let scene, camera, renderer;
+let foodGroup, snakeGroup, groundMesh;
+let threeReady = false;
+let threeError = null;
+let camAngle = 0;
 
-  const cw = canvas.width = window.innerWidth;
-  const ch = canvas.height = Math.max(200, window.innerHeight - 100);
-  ctx.clearRect(0, 0, cw, ch);
-  const cell = Math.floor(Math.min(cw / world.w, ch / world.h));
-  const ox = Math.floor((cw - world.w * cell) / 2);
-  const oy = Math.floor((ch - world.h * cell) / 2);
-
-  ctx.fillStyle = '#0d0d1a';
-  ctx.fillRect(0, 0, cw, ch);
-
-  // Subtle grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x <= world.w; x++) {
-    ctx.beginPath(); ctx.moveTo(ox + x*cell, oy); ctx.lineTo(ox + x*cell, oy + world.h*cell); ctx.stroke();
-  }
-  for (let y = 0; y <= world.h; y++) {
-    ctx.beginPath(); ctx.moveTo(ox, oy + y*cell); ctx.lineTo(ox + world.w*cell, oy + y*cell); ctx.stroke();
+function initThree() {
+  if (typeof THREE === 'undefined') {
+    threeError = 'Three.js library failed to load';
+    console.error(threeError);
+    statusMsg.textContent = '3D engine not available - check browser WebGL support';
+    return;
   }
 
-  // Food with pulse
-  const pulse = Math.sin(Date.now() / 200) * 0.15 + 1;
-  for (const f of gameState.foods) {
-    const fx = ox + f.x * cell + cell/2;
-    const fy = oy + f.y * cell + cell/2;
-    const r = (cell/2 - 2) * pulse;
-    const grad = ctx.createRadialGradient(fx-r*0.3, fy-r*0.3, 0, fx, fy, r);
-    grad.addColorStop(0, '#ff6b6b');
-    grad.addColorStop(0.7, '#ee5a24');
-    grad.addColorStop(1, '#c0392b');
-    ctx.fillStyle = grad;
-    ctx.shadowColor = '#ff4757';
-    ctx.shadowBlur = 6;
-    ctx.beginPath(); ctx.arc(fx, fy, r, 0, Math.PI*2); ctx.fill();
-    ctx.shadowBlur = 0;
+  try {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a1a);
+
+    const w = container.clientWidth || window.innerWidth;
+    const h = container.clientHeight || Math.max(200, window.innerHeight - 100);
+    camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 200);
+    camera.position.set(0, 35, 30);
+    camera.lookAt(0, 0, 0);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    const ambient = new THREE.AmbientLight(0x404060, 0.5);
+    scene.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xffeedd, 0.9);
+    dirLight.position.set(30, 50, 20);
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0x4488ff, 0.3);
+    fillLight.position.set(-20, 30, -20);
+    scene.add(fillLight);
+
+    initGround();
+    foodGroup = new THREE.Group();
+    scene.add(foodGroup);
+    snakeGroup = new THREE.Group();
+    scene.add(snakeGroup);
+
+    threeReady = true;
+    console.log('Three.js 3D scene initialized');
+    animate();
+  } catch (err) {
+    threeError = err.message || 'Unknown 3D error';
+    console.error('Three.js init failed:', err);
+    statusMsg.textContent = '3D error: ' + threeError;
+  }
+}
+
+function initGround() {
+  if (groundMesh) scene.remove(groundMesh);
+  const gSize = 62;
+  const geo = new THREE.PlaneGeometry(gSize, gSize * (world.h / world.w));
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x0d0d1a,
+    roughness: 0.9,
+    metalness: 0.1,
+  });
+  groundMesh = new THREE.Mesh(geo, mat);
+  groundMesh.rotation.x = -Math.PI / 2;
+  groundMesh.position.set(0, -0.05, 0);
+  groundMesh.receiveShadow = true;
+  scene.add(groundMesh);
+
+  const grid = new THREE.GridHelper(Math.max(world.w, world.h), Math.max(world.w, world.h), 0x1a1a3a, 0x111128);
+  grid.position.set(0, 0.01, 0);
+  scene.add(grid);
+
+  const borderMat = new THREE.MeshStandardMaterial({ color: 0x1a1a3a, emissive: 0x0a0a2a });
+  [-1, 1].forEach(side => {
+    const b1 = new THREE.Mesh(new THREE.BoxGeometry(gSize, 0.3, 0.3), borderMat);
+    b1.position.set(0, 0.15, side * (world.h / 2 + 0.5));
+    scene.add(b1);
+    const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, gSize * (world.h / world.w)), borderMat);
+    b2.position.set(side * (world.w / 2 + 0.5), 0.15, 0);
+    scene.add(b2);
+  });
+}
+
+const COLORS = [
+  { head: 0x00e676, body: 0x00c853, emissive: 0x00e676 },
+  { head: 0x448aff, body: 0x2979ff, emissive: 0x448aff },
+  { head: 0xff6b6b, body: 0xee5a24, emissive: 0xff6b6b },
+  { head: 0xfeca57, body: 0xf9ca24, emissive: 0xfeca57 },
+  { head: 0xa29bfe, body: 0x6c5ce7, emissive: 0xa29bfe },
+  { head: 0xfd79a8, body: 0xe84393, emissive: 0xfd79a8 },
+  { head: 0x00cec9, body: 0x00b894, emissive: 0x00cec9 },
+  { head: 0xff9ff3, body: 0xf368e0, emissive: 0xff9ff3 },
+];
+
+function updateScene(state) {
+  if (!threeReady) return;
+  gameState = state;
+
+  while (foodGroup.children.length) {
+    const c = foodGroup.children[0];
+    c.geometry.dispose();
+    c.material.dispose();
+    foodGroup.remove(c);
+  }
+  while (snakeGroup.children.length) {
+    const c = snakeGroup.children[0];
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) c.material.dispose();
+    snakeGroup.remove(c);
   }
 
-  // Snakes
-  for (const p of gameState.players) {
+  if (!state) return;
+
+  const offX = (world.w - 1) / 2;
+  const offZ = (world.h - 1) / 2;
+
+  const foodGeo = new THREE.SphereGeometry(0.35, 12, 12);
+  const foodMat = new THREE.MeshStandardMaterial({
+    color: 0xff4757,
+    emissive: 0xff6b6b,
+    emissiveIntensity: 0.5,
+    roughness: 0.2,
+    metalness: 0.1,
+  });
+  for (const f of state.foods) {
+    const mesh = new THREE.Mesh(foodGeo, foodMat);
+    mesh.position.set(f.x - offX, 0.3, f.y - offZ);
+    mesh.castShadow = true;
+    foodGroup.add(mesh);
+  }
+
+  const cache = { geo: {}, mat: {} };
+
+  for (const p of state.players) {
     if (!p.alive && p.body.length === 0) continue;
     const isMe = p.colorIdx === myColorIdx;
-    const colors = [
-      { head: '#00e676', body: '#00c853', dark: '#009624', glow: 'rgba(0,230,118,' },
-      { head: '#448aff', body: '#2979ff', dark: '#0055cc', glow: 'rgba(68,138,255,' },
-      { head: '#ff6b6b', body: '#ee5a24', dark: '#c0392b', glow: 'rgba(255,107,107,' },
-      { head: '#feca57', body: '#f9ca24', dark: '#f0932b', glow: 'rgba(254,202,87,' },
-      { head: '#a29bfe', body: '#6c5ce7', dark: '#5f27cd', glow: 'rgba(162,155,254,' },
-      { head: '#fd79a8', body: '#e84393', dark: '#c44569', glow: 'rgba(253,121,168,' },
-      { head: '#00cec9', body: '#00b894', dark: '#00a381', glow: 'rgba(0,206,201,' },
-      { head: '#ff9ff3', body: '#f368e0', dark: '#be2edd', glow: 'rgba(255,159,243,' },
-    ];
-    const c = colors[p.colorIdx % colors.length] || colors[0];
-
-    // Glow around alive snakes
-    if (p.alive && isMe) {
-      ctx.shadowColor = c.head;
-      ctx.shadowBlur = 8;
-    }
+    const c = COLORS[p.colorIdx % COLORS.length] || COLORS[0];
 
     for (let i = p.body.length - 1; i >= 0; i--) {
       const seg = p.body[i];
-      const sx = ox + seg.x * cell;
-      const sy = oy + seg.y * cell;
+      const isHead = i === 0;
       const t = i / Math.max(p.body.length - 1, 1);
-      const pad = Math.max(1, t * cell * 0.25);
 
-      if (i === 0) {
-        ctx.shadowColor = isMe && p.alive ? c.head : 'transparent';
-        ctx.shadowBlur = isMe && p.alive ? 10 : 0;
-        ctx.fillStyle = c.head;
-        roundRect(ctx, sx + pad/2, sy + pad/2, cell - pad, cell - pad, cell*0.3);
+      const sz = Math.max(0.4, isHead ? 0.8 : 0.7 * (1 - t * 0.25));
+      const ht = isHead ? 0.5 : 0.3 * (1 - t * 0.3);
+      const yPos = isHead ? 0.25 : 0.15 * (1 - t * 0.3);
 
-        // Eyes
-        ctx.shadowBlur = 0;
-        const ed = cell * 0.18;
-        ctx.fillStyle = '#fff';
+      const gk = `box_${Math.round(sz*10)}_${Math.round(ht*10)}`;
+      if (!cache.geo[gk]) {
+        cache.geo[gk] = new THREE.BoxGeometry(sz, ht, sz);
+      }
+      const geo = cache.geo[gk];
+
+      const mk = isHead ? `head_${c.head}` : `body_${c.body}`;
+      if (!cache.mat[mk]) {
+        cache.mat[mk] = new THREE.MeshStandardMaterial({
+          color: isHead ? c.head : c.body,
+          emissive: c.emissive,
+          emissiveIntensity: isHead ? 0.15 : 0.05,
+          roughness: isHead ? 0.3 : 0.5,
+          metalness: isHead ? 0.3 : 0.1,
+        });
+      }
+      const mat = cache.mat[mk];
+
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(seg.x - offX, yPos, seg.y - offZ);
+      mesh.castShadow = true;
+      snakeGroup.add(mesh);
+
+      if (isHead) {
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+        const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
+        const pupilGeo = new THREE.SphereGeometry(0.05, 8, 8);
+
         const dirMap = {
-          right: [{ x: 0.6, y: 0.25 }, { x: 0.6, y: 0.65 }],
-          left:  [{ x: 0.4, y: 0.25 }, { x: 0.4, y: 0.65 }],
-          up:    [{ x: 0.25, y: 0.4 }, { x: 0.65, y: 0.4 }],
-          down:  [{ x: 0.25, y: 0.6 }, { x: 0.65, y: 0.6 }],
+          right: [[1, 1, 0], [1, -1, 0], [1, 0, 0]],
+          left:  [[-1, 1, 0], [-1, -1, 0], [-1, 0, 0]],
+          up:    [[0, 1, 1], [0, -1, 1], [0, 0, 1]],
+          down:  [[0, 1, -1], [0, -1, -1], [0, 0, -1]],
         };
-        const eyePositions = dirMap[p.dir] || dirMap.right;
-        for (const ep of eyePositions) {
-          ctx.beginPath();
-          ctx.arc(sx + ep.x * cell, sy + ep.y * cell, ed, 0, Math.PI*2);
-          ctx.fill();
+        const d = dirMap[p.dir] || dirMap.right;
+        const eOff = 0.32;
+
+        for (let e = 0; e < 2; e++) {
+          const eye = new THREE.Mesh(eyeGeo, eyeMat);
+          eye.position.set(
+            seg.x - offX + d[e][0] * eOff,
+            yPos + d[e][1] * 0.18,
+            seg.y - offZ + d[e][2] * eOff
+          );
+          snakeGroup.add(eye);
+
+          const pupil = new THREE.Mesh(pupilGeo, pupilMat);
+          pupil.position.set(
+            seg.x - offX + d[e][0] * eOff + d[2][0] * 0.2,
+            yPos + d[e][1] * 0.18 + d[2][1] * 0.1,
+            seg.y - offZ + d[e][2] * eOff + d[2][2] * 0.2
+          );
+          snakeGroup.add(pupil);
         }
-        // Pupils
-        ctx.fillStyle = '#111';
-        const pd = ed * 0.5;
-        const pupDirs = { right: [0.3, 0], left: [-0.3, 0], up: [0, -0.3], down: [0, 0.3] };
-        const pOff = pupDirs[p.dir] || pupDirs.right;
-        for (const ep of eyePositions) {
-          ctx.beginPath();
-          ctx.arc(sx + ep.x * cell + pOff[0] * ed * 0.5, sy + ep.y * cell + pOff[1] * ed * 0.5, pd, 0, Math.PI*2);
-          ctx.fill();
-        }
-      } else {
-        const alpha = 1 - t * 0.4;
-        ctx.globalAlpha = Math.max(0.3, alpha);
-        ctx.fillStyle = c.body;
-        ctx.shadowBlur = 0;
-        const bp = Math.max(2, t * cell * 0.3);
-        roundRect(ctx, sx + bp/2, sy + bp/2, cell - bp, cell - bp, cell*0.15);
-        ctx.globalAlpha = 1;
       }
     }
   }
-  ctx.shadowBlur = 0;
-
-  animFrame = requestAnimationFrame(render);
 }
 
-function roundRect(ctx, x, y, w, h, r) {
-  r = Math.min(r, w/2, h/2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-  ctx.fill();
+function animate() {
+  requestAnimationFrame(animate);
+  if (!threeReady) return;
+
+  camAngle += 0.001;
+  const cx = Math.sin(camAngle) * 5;
+  const cz = Math.cos(camAngle) * 5;
+  camera.position.x = cx;
+  camera.position.z = 30 + cz;
+  camera.lookAt(0, 0, 0);
+
+  const pulse = Math.sin(Date.now() / 200) * 0.2 + 1;
+  foodGroup.children.forEach(m => m.scale.setScalar(pulse));
+
+  renderer.render(scene, camera);
 }
 
-window.addEventListener('resize', () => { if (gameState) render(); });
+function onResize() {
+  if (!threeReady) return;
+  const w = container.clientWidth || window.innerWidth;
+  const h = container.clientHeight || Math.max(200, window.innerHeight - 100);
+  if (w > 0 && h > 0) {
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+}
+
+window.addEventListener('resize', onResize);
+
+initThree();

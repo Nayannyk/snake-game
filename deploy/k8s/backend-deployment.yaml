@@ -6,7 +6,7 @@ metadata:
   labels:
     app: snake-backend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: snake-backend
@@ -56,3 +56,4 @@ spec:
   - port: 3000
     targetPort: 3000
   type: ClusterIP
+  sessionAffinity: ClientIP
