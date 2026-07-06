@@ -185,7 +185,7 @@ jobs:
             esac
           done
           ${SSH} "kubectl apply -f /home/ubuntu/manifests/namespace.yaml"
-          ${SSH} "kubectl wait --namespace=snake-game --for=condition=Active namespace/snake-game --timeout=30s"
+          ${SSH} "kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/snake-game --timeout=30s"
           ${SSH} "kubectl apply -f /home/ubuntu/manifests/"
 
       - name: Verify
