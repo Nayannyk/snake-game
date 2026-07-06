@@ -139,7 +139,7 @@ resource "aws_instance" "kind" {
   root_block_device {
     volume_size = var.root_volume_size
     volume_type = "gp3"
-    encrypted   = true
+    encrypted   = false
   }
 
   user_data = file("${path.module}/user-data.sh")
