@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: <your-dockerhub-username>/snake-frontend:latest
+        image: nayannyk/snake-frontend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 80

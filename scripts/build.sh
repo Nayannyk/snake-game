@@ -2,7 +2,7 @@
 set -euo pipefail
 
 IMAGE_TAG=${1:-latest}
-DOCKER_REGISTRY=${DOCKER_REGISTRY:-<your-dockerhub-username>}
+DOCKER_REGISTRY=${DOCKER_REGISTRY:-nayannyk}
 
 echo "Building backend image..."
 docker build -t "${DOCKER_REGISTRY}/snake-backend:${IMAGE_TAG}" ./backend

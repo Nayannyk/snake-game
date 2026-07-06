@@ -3,7 +3,7 @@ set -euo pipefail
 
 ENVIRONMENT=${1:-dev}
 IMAGE_TAG=${2:-latest}
-DOCKER_REGISTRY=${DOCKER_REGISTRY:-<your-dockerhub-username>}
+DOCKER_REGISTRY=${DOCKER_REGISTRY:-nayannyk}
 KIND_CLUSTER=${KIND_CLUSTER:-kind-workers}
 TF_DIR="deploy/terraform/environments/${ENVIRONMENT}"
 
