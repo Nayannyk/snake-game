@@ -8,6 +8,11 @@ terraform/**/.terraform/
 terraform/**/tfplan
 terraform/**/*.tfstate
 terraform/**/*.tfstate.backup
+infrastructure/terraform/.terraform/
+infrastructure/terraform/tfplan
+infrastructure/terraform/*.tfstate
+infrastructure/terraform/*.tfstate.backup
+*.pem
 node_modules/
 __pycache__/
 *.pyc
