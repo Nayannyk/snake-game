@@ -92,9 +92,14 @@ resource "tls_private_key" "kind" {
   rsa_bits  = 4096
 }
 
+resource "random_id" "key_suffix" {
+  count       = var.key_name == "" ? 1 : 0
+  byte_length = 4
+}
+
 resource "aws_key_pair" "kind" {
   count      = var.key_name == "" ? 1 : 0
-  key_name   = "${local.instance_name}-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+  key_name   = "${local.instance_name}-${random_id.key_suffix[0].hex}"
   public_key = tls_private_key.kind[0].public_key_openssh
 
   tags = var.tags
@@ -145,4 +150,12 @@ resource "aws_instance" "kind" {
   tags = merge(var.tags, {
     Name = local.instance_name
   })
+
+  lifecycle {
+    ignore_changes = [
+      ami,
+      user_data,
+      user_data_base64,
+    ]
+  }
 }
