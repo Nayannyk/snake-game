@@ -54,10 +54,31 @@ jobs:
             aws s3 mb "s3://${BUCKET}" --region "$AWS_REGION"
           fi
 
+      - name: Check for app code changes
+        id: changes
+        run: |
+          if git rev-parse --verify HEAD~1 &>/dev/null; then
+            CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          else
+            CHANGED=$(git diff --name-only origin/main HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || echo ".")
+          fi
+          BACKEND=$(echo "$CHANGED" | grep -q '^backend/' && echo 'true' || echo 'false')
+          FRONTEND=$(echo "$CHANGED" | grep -q '^frontend/' && echo 'true' || echo 'false')
+          echo "backend=$BACKEND" >> "$GITHUB_OUTPUT"
+          echo "frontend=$FRONTEND" >> "$GITHUB_OUTPUT"
+          ANY=false
+          if [ "$BACKEND" = "true" ] || [ "$FRONTEND" = "true" ]; then ANY=true; fi
+          echo "any=$ANY" >> "$GITHUB_OUTPUT"
+          echo "Changed files:"; echo "$CHANGED"
+
       - name: Build Terraform vars
         id: tf-vars
         run: |
-          VARS="-var=environment=${{ inputs.environment }} -var=instance_type=${{ inputs.instance_type }}"
+          TAG="${{ env.IMAGE_TAG }}"
+          # Use "latest" if no app code changed (images already on Docker Hub)
+          if [ "${{ steps.changes.outputs.any }}" = "false" ]; then TAG="latest"; fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          VARS="-var=environment=${{ inputs.environment }} -var=instance_type=${{ inputs.instance_type }} -var=image_tag=${TAG}"
           if [ -n "${{ inputs.key_name }}" ]; then
             VARS="$VARS -var=key_name=${{ inputs.key_name }}"
           fi
@@ -143,22 +164,24 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build & push backend
+        if: steps.changes.outputs.any == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: |
             ${{ env.DOCKER_REGISTRY }}/snake-backend:latest
-            ${{ env.DOCKER_REGISTRY }}/snake-backend:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/snake-backend:${{ steps.tf-vars.outputs.tag }}
 
       - name: Build & push frontend
+        if: steps.changes.outputs.any == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
           tags: |
             ${{ env.DOCKER_REGISTRY }}/snake-frontend:latest
-            ${{ env.DOCKER_REGISTRY }}/snake-frontend:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/snake-frontend:${{ steps.tf-vars.outputs.tag }}
 
       - name: Deploy to Kind
         shell: bash
