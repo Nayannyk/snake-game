@@ -184,6 +184,7 @@ jobs:
               *) ${SCP} "$F" ubuntu@${IP}:/home/ubuntu/manifests/ ;;
             esac
           done
+          ${SSH} "kubectl apply -f /home/ubuntu/manifests/namespace.yaml"
           ${SSH} "kubectl apply -f /home/ubuntu/manifests/"
 
       - name: Verify
