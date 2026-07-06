@@ -1,7 +1,9 @@
 name: Full Deploy
-run-name: Full Deploy (${{ inputs.environment }}) ${{ github.ref_name }}
+run-name: Full Deploy (${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}) ${{ github.ref_name }}
 
 on:
+  push:
+    branches: [main, develop]
   workflow_dispatch:
     inputs:
       environment:
@@ -25,8 +27,25 @@ env:
   TF_STATE_BASE: snake-game-tfstate
 
 jobs:
-  deploy:
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.name }}
+    steps:
+      - id: env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            echo "name=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: setup
+    runs-on: ubuntu-latest
+    environment: ${{ needs.setup.outputs.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
