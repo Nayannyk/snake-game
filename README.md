@@ -65,10 +65,15 @@ snake-game/
 
 ## Prerequisites
 
+### Local Development
 - [Docker](https://docs.docker.com/get-docker/)
 - [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
 - [Helm](https://helm.sh/docs/intro/install/) (optional, for alternative metrics-server install)
+
+### CI/CD Pipelines
+
+Each pipeline needs its own setup. See the [CI/CD](#cicd) section below.
 
 ## Quick Start (Local Dev)
 
@@ -132,20 +137,124 @@ Open **http://localhost** in your browser to play.
 | `make dev`       | Run locally with Docker Compose          |
 | `make cluster-delete` | Delete the Kind cluster             |
 
-## CI/CD Pipeline (Jenkins)
+## CI/CD
 
-Pipeline definition: [`ci/Jenkinsfile`](ci/Jenkinsfile)
+Three CI/CD pipelines are provided — one per VCS. Each pipeline builds Docker images, deploys to Kind via Terraform, and runs smoke tests.
 
-Defines 10 stages:
-1. Checkout
-2. Unit Tests
-3. Build & Push Docker Images
-4. Load Images into Kind
-5. Terraform Init
-6. Terraform Plan
-7. Terraform Apply
-8. Rollout Verification
-9. Smoke Test
-10. Cleanup
+| Branch | Pipeline | Config File |
+|--------|----------|-------------|
+| `main` | Jenkins | [`ci/Jenkinsfile`](ci/Jenkinsfile) |
+| `github-actions` | GitHub Actions | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) |
+| `gitlab-ci` | GitLab CI/CD | [`.gitlab-ci.yml`](.gitlab-ci.yml) |
 
-Triggers: every 5 min SCM poll on main/develop branches.
+All pipelines share the same stages:
+1. Unit Tests + Lint
+2. Build & Push Docker Images to Docker Hub
+3. Load Images into Kind
+4. Terraform Init / Plan / Apply
+5. Rollout Verification
+6. Smoke Test
+7. Cleanup
+
+---
+
+### Jenkins (`main` branch)
+
+**Trigger:** Automatic — SCM poll every 5 min on `main` and `develop` branches.  
+**Config:** [`ci/Jenkinsfile`](ci/Jenkinsfile) | [`ci/jenkins/snake-game-pipeline.xml`](ci/jenkins/snake-game-pipeline.xml)
+
+#### What you need to set up in Jenkins
+
+| Item | Value |
+|------|-------|
+| Pipeline definition | Pipeline script from SCM |
+| SCM | Git, repo: `https://github.com/Nayannyk/snake-game.git` |
+| Branch | `*/main` (or `*/develop`) |
+| Script Path | `ci/Jenkinsfile` |
+| Credentials | `docker-hub-credentials` (Docker Hub username + password/token) |
+| Agent | Must have Docker, Kind, kubectl, Terraform installed and `kind` cluster running |
+
+#### Trigger manually
+```bash
+# Via Jenkins UI: "Build Now"
+
+# Or via CLI:
+curl -X POST "http://<jenkins-url>/job/snake-game/job/main/build" --user user:token
+```
+
+---
+
+### GitHub Actions (`github-actions` branch)
+
+**Trigger:** Automatic on push/PR to `main` or `develop` branches.  
+**Config:** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+
+#### What you need to set up in GitHub
+
+| Item | Where | Value |
+|------|-------|-------|
+| `DOCKER_USERNAME` | Settings → Secrets & variables → Actions | Your Docker Hub username |
+| `DOCKER_PASSWORD` | Settings → Secrets & variables → Actions | Docker Hub access token (or password) |
+| Self-hosted runner | Settings → Actions → Runners | Linux runner with Docker, Kind, kubectl, Terraform, and a running `kind` cluster |
+
+> **Note:** The `deploy` job runs on `self-hosted` — it will be skipped on GitHub-hosted runners. Only the `test` and `build-and-push` jobs run on `ubuntu-latest`. If you don't have a self-hosted runner, push is enough; deploy elsewhere.
+
+#### Add a self-hosted runner
+
+```bash
+# On your Kind host machine:
+# 1. Go to GitHub repo → Settings → Actions → Runners → "New self-hosted runner"
+# 2. Follow the download & configure steps (Linux ×64)
+# 3. Start the runner:
+./run.sh
+```
+
+#### Trigger manually
+```bash
+# Push to the branch:
+git checkout github-actions
+git push origin github-actions
+
+# Or via GitHub UI: Actions → "Deploy Snake Game" → "Run workflow"
+```
+
+---
+
+### GitLab CI/CD (`gitlab-ci` branch)
+
+**Trigger:** Automatic on push to `main` or `develop` branches.  
+**Config:** [`.gitlab-ci.yml`](.gitlab-ci.yml)
+
+#### What you need to set up in GitLab
+
+| Item | Where | Value |
+|------|-------|-------|
+| `DOCKER_USERNAME` | Settings → CI/CD → Variables | Your Docker Hub username |
+| `DOCKER_PASSWORD` | Settings → CI/CD → Variables | Docker Hub access token (masked) |
+| Runner tagged `kind` | Settings → CI/CD → Runners | Linux runner with Docker, Kind, kubectl, Terraform, and a running `kind` cluster |
+
+> **Note:** The deploy stages (`load-images`, `terraform-*`, `verify-*`, `smoke-test`) require a runner with the `kind` tag. Build stages use the default `docker:24` image and can run on any shared runner.
+
+#### Add a runner with the `kind` tag
+
+```bash
+# On your Kind host machine:
+# 1. Register a runner with tag "kind":
+gitlab-runner register \
+  --url https://gitlab.com \
+  --registration-token <your-token> \
+  --executor shell \
+  --tag-list kind \
+  --description "Kind K8s runner"
+# 2. Start the runner:
+gitlab-runner run
+```
+
+#### Trigger manually
+```bash
+# Push to the branch:
+git checkout gitlab-ci
+git push origin gitlab-ci
+
+# Or via GitLab UI: CI/CD → Pipelines → "Run pipeline"
+```
