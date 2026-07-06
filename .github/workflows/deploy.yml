@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  DOCKER_REGISTRY: nayannyk
+  DOCKER_REGISTRY: your-dockerhub-username
   IMAGE_TAG: ${{ github.ref_name == 'main' && 'stable' || 'develop' }}
   KIND_CLUSTER: kind
   NAMESPACE: snake-game
