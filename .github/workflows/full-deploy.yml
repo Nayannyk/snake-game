@@ -186,6 +186,8 @@ jobs:
           done
           ${SSH} "kubectl apply -f /home/ubuntu/manifests/namespace.yaml"
           ${SSH} "kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/snake-game --timeout=30s"
+          ${SSH} "kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml"
+          ${SSH} "kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s"
           ${SSH} "kubectl apply -f /home/ubuntu/manifests/"
 
       - name: Verify
