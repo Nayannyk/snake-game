@@ -22,7 +22,7 @@ env:
   TF_WORKING_DIR: infrastructure/terraform
   DOCKER_REGISTRY: nayannyk
   IMAGE_TAG: build-${{ github.run_number }}
-  CACHE_KEY: tf-state-${{ github.workflow }}
+  TF_STATE_BASE: snake-game-tfstate
 
 jobs:
   deploy:
@@ -42,6 +42,17 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Prepare S3 backend
+        id: backend
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET="${TF_STATE_BASE}-${ACCOUNT_ID}"
+          echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
+          if ! aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            echo "Creating S3 bucket: $BUCKET"
+            aws s3 mb "s3://${BUCKET}" --region "$AWS_REGION"
+          fi
 
       - name: Build Terraform vars
         id: tf-vars
@@ -65,12 +76,51 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init -reconfigure
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=${{ steps.backend.outputs.bucket }}" \
+            -backend-config="key=infrastructure/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
 
-      - name: Terraform Destroy
+      - name: Clean up orphaned resources
         continue-on-error: true
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform destroy -auto-approve ${{ steps.tf-vars.outputs.value }}
+        run: |
+          ENV="${{ inputs.environment }}"
+          NAME="snake-game-kind-${ENV}"
+          echo "=== Cleaning resources with name: ${NAME} ==="
+
+          # 1. Terminate any existing EC2 instance with this name
+          INSTANCE_IDS=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${NAME}" "Name=instance-state-name,Values=running,pending,stopping,stopped" \
+            --query "Reservations[*].Instances[*].InstanceId" --output text)
+          if [ -n "$INSTANCE_IDS" ]; then
+            for IID in $INSTANCE_IDS; do
+              echo "Terminating EC2 instance: $IID"
+              aws ec2 terminate-instances --instance-ids "$IID"
+            done
+            echo "Waiting for termination..."
+            aws ec2 wait instance-terminated --instance-ids $(echo "$INSTANCE_IDS" | tr '\n' ' ')
+          fi
+
+          # 2. Find and delete any dangling ENIs referencing the SG
+          SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${NAME}" --query "SecurityGroups[*].GroupId" --output text)
+          if [ -n "$SG_ID" ]; then
+            echo "Found security group: $SG_ID"
+            ENI_IDS=$(aws ec2 describe-network-interfaces \
+              --filters "Name=group-id,Values=${SG_ID}" \
+              --query "NetworkInterfaces[*].NetworkInterfaceId" --output text)
+            if [ -n "$ENI_IDS" ]; then
+              for ENI in $ENI_IDS; do
+                echo "Deleting dangling ENI: $ENI"
+                aws ec2 delete-network-interface --network-interface-id "$ENI" 2>/dev/null || \
+                  aws ec2 detach-network-interface --attachment-id "$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)" 2>/dev/null || true
+                sleep 5
+                aws ec2 delete-network-interface --network-interface-id "$ENI" 2>/dev/null || true
+              done
+            fi
+            echo "Deleting security group: $SG_ID"
+            aws ec2 delete-security-group --group-id "$SG_ID" 2>/dev/null && echo "SG deleted" || echo "SG deletion skipped (may already be gone)"
+          fi
 
       - name: Terraform Apply
         id: apply
