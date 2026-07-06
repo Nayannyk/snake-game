@@ -12,6 +12,10 @@ on:
         description: Existing AWS key pair name (leave empty to auto-generate)
         required: false
         default: ""
+      instance_type:
+        description: EC2 instance type
+        required: false
+        default: t2.micro
 
 env:
   AWS_REGION: ap-south-1
@@ -42,7 +46,7 @@ jobs:
       - name: Build Terraform vars
         id: tf-vars
         run: |
-          VARS="-var=environment=${{ inputs.environment }}"
+          VARS="-var=environment=${{ inputs.environment }} -var=instance_type=${{ inputs.instance_type }}"
           if [ -n "${{ inputs.key_name }}" ]; then
             VARS="$VARS -var=key_name=${{ inputs.key_name }}"
           fi
