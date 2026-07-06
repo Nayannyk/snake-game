@@ -29,13 +29,13 @@ variable "key_name" {
 }
 
 variable "allowed_ssh_cidr" {
-  description = "CIDR block allowed to SSH into the instance"
+  description = "CIDR block allowed to SSH into the instance. WARNING: 0.0.0.0/0 exposes SSH to the internet."
   type        = string
   default     = "0.0.0.0/0"
 }
 
 variable "allowed_http_cidr" {
-  description = "CIDR block allowed to access the game HTTP endpoint"
+  description = "CIDR block allowed to access the game HTTP endpoint (ports 80, 443)"
   type        = string
   default     = "0.0.0.0/0"
 }

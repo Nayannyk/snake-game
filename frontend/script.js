@@ -36,6 +36,12 @@ soloBtn.addEventListener('click', connectSolo);
 leaveBtn.addEventListener('click', () => { socket.emit('leaveGame'); leaveGame(); });
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
 
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 function connect() {
   myName = nameInput.value.trim() || 'Player';
   if (!myName) { nameInput.focus(); return; }
@@ -89,7 +95,7 @@ socket.on('joined', (data) => {
 });
 
 socket.on('waiting', (data) => {
-  statusMsg.innerHTML = `<span class="pulse">${data.message}</span>`;
+  statusMsg.innerHTML = `<span class="pulse">${escapeHtml(data.message)}</span>`;
 });
 
 socket.on('gameStarting', ({ countdown }) => {
@@ -110,13 +116,13 @@ socket.on('gameState', (state) => {
     const bot = state.players.find(p => p.isBot);
     const human = state.players.find(p => !p.isBot);
     if (human && human.colorIdx === myColorIdx) {
-      p1info.innerHTML = `<span class="you-badge">YOU</span> ${human.name}: <span id="p1score">${human.score}</span>`;
-      p2info.innerHTML = bot ? `<span class="bot-badge">BOT</span> ${bot.name}: <span id="p2score">${bot.score}</span>` : '';
+      p1info.innerHTML = `<span class="you-badge">YOU</span> ${escapeHtml(human.name)}: <span id="p1score">${human.score}</span>`;
+      p2info.innerHTML = bot ? `<span class="bot-badge">BOT</span> ${escapeHtml(bot.name)}: <span id="p2score">${bot.score}</span>` : '';
     } else {
       const me = state.players.find(p => p.colorIdx === myColorIdx);
       const other = state.players.find(p => p.colorIdx !== myColorIdx);
-      p1info.innerHTML = me ? `<span class="you-badge">YOU</span> ${me.name}: <span id="p1score">${me.score}</span>` : '';
-      p2info.innerHTML = other ? (other.isBot ? `<span class="bot-badge">BOT</span> ${other.name}: <span id="p2score">${other.score}</span>` : `${other.name}: <span id="p2score">${other.score}</span>`) : '';
+      p1info.innerHTML = me ? `<span class="you-badge">YOU</span> ${escapeHtml(me.name)}: <span id="p1score">${me.score}</span>` : '';
+      p2info.innerHTML = other ? (other.isBot ? `<span class="bot-badge">BOT</span> ${escapeHtml(other.name)}: <span id="p2score">${other.score}</span>` : `${escapeHtml(other.name)}: <span id="p2score">${other.score}</span>`) : '';
     }
   }
   updateScene(state);
@@ -144,8 +150,10 @@ socket.on('gameOver', (data) => {
   notification.classList.remove('hidden');
   const meWon = msg === 'You Won!' || msg === 'You Win!';
   const showScore = me ? me.score : 0;
-  const showName = me ? me.name : 'You';
+  const showName = me ? escapeHtml(me.name) : 'You';
   const showOther = hasBot ? (other || { name: 'Bots', score: 0 }) : other;
+  const showOtherName = showOther ? escapeHtml(showOther.name) : 'Bots';
+  const showOtherScore = showOther ? showOther.score : 0;
   notification.innerHTML = !me ? `
     <div class="gameover-box">
       <h2 style="color:#ff4757">${msg}</h2>
@@ -162,8 +170,8 @@ socket.on('gameOver', (data) => {
         </div>
         <div class="go-vs">VS</div>
         <div class="go-player ${!meWon && showOther ? 'win' : ''}">
-          <div class="go-name">${showOther ? showOther.name : 'Bots'}</div>
-          <div class="go-pts">${showOther ? showOther.score : 0}</div>
+          <div class="go-name">${showOtherName}</div>
+          <div class="go-pts">${showOtherScore}</div>
         </div>
       </div>
       <p style="color:rgba(255,255,255,0.4);font-size:0.85rem;margin-bottom:1rem">${sub}</p>
@@ -179,7 +187,7 @@ socket.on('gameOver', (data) => {
         </div>
         <div class="go-vs">VS</div>
         <div class="go-player ${other && other.score > (me ? me.score : 0) ? 'win' : ''}">
-          <div class="go-name">${other ? other.name : 'Opponent'}</div>
+          <div class="go-name">${other ? escapeHtml(other.name) : 'Opponent'}</div>
           <div class="go-pts">${other ? other.score : 0}</div>
         </div>
       </div>
@@ -193,7 +201,7 @@ socket.on('playerDisconnected', ({ name }) => {
   notification.classList.remove('hidden');
   notification.innerHTML = `
     <div class="gameover-box">
-      <h2 style="color:#ffa502">${name} Disconnected</h2>
+      <h2 style="color:#ffa502">${escapeHtml(name)} Disconnected</h2>
       <p style="color:rgba(255,255,255,0.5);margin:0.5rem 0 1rem">You win by default!</p>
       <button class="btn primary" onclick="leaveGame()">Play Again</button>
     </div>

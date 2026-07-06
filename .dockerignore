@@ -1,0 +1,9 @@
+**/.git
+**/.gitignore
+**/node_modules
+**/*.pem
+**/*.key
+**/*.cert
+**/.env
+**/.env.*
+**/README.md

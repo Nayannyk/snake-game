@@ -46,34 +46,7 @@ resource "aws_vpc_security_group_ingress_rule" "https" {
 }
 
 # NodePort range (frontend exposed on 30080)
-resource "aws_vpc_security_group_ingress_rule" "nodeport" {
-  security_group_id = aws_security_group.kind.id
-  cidr_ipv4         = var.allowed_http_cidr
-  from_port         = 30080
-  to_port           = 30080
-  ip_protocol       = "tcp"
-  description       = "K8s NodePort - direct frontend access"
-}
-
-# Kubernetes API server (optional - for remote kubectl)
-resource "aws_vpc_security_group_ingress_rule" "kube_api" {
-  security_group_id = aws_security_group.kind.id
-  cidr_ipv4         = var.allowed_ssh_cidr
-  from_port         = 6443
-  to_port           = 6443
-  ip_protocol       = "tcp"
-  description       = "Kubernetes API server"
-}
-
-# Backend API direct access (optional)
-resource "aws_vpc_security_group_ingress_rule" "backend" {
-  security_group_id = aws_security_group.kind.id
-  cidr_ipv4         = var.allowed_http_cidr
-  from_port         = 3000
-  to_port           = 3000
-  ip_protocol       = "tcp"
-  description       = "Backend API direct access"
-}
+# REMOVED: Access should go through Ingress (port 80), not directly via NodePort
 
 # Allow all outbound traffic
 resource "aws_vpc_security_group_egress_rule" "all" {

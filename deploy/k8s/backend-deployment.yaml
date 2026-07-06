@@ -15,12 +15,23 @@ spec:
       labels:
         app: snake-backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: backend
         image: nayannyk/snake-backend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: false
         env:
         - name: PORT
           value: "3000"

@@ -27,7 +27,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS scores (
 db.exec(`CREATE INDEX IF NOT EXISTS idx_scores_score ON scores(score DESC)`);
 
 app.get('/api/scores', (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 10, 100);
   const mode = req.query.mode;
   let rows;
   if (mode) {
@@ -245,7 +245,7 @@ function saveScore(p) {
   try {
     db.prepare('INSERT INTO scores (player_name, score, mode, killed_by) VALUES (?, ?, ?, ?)')
       .run(p.name, p.score, 'solo', p.killedBy || null);
-  } catch (e) {}
+  } catch (e) { console.error('Failed to save score:', e.message); }
 }
 
 function emitState(room) {
@@ -306,7 +306,8 @@ io.on('connection', (socket) => {
   let playerId = socket.id;
 
   socket.on('joinQueue', ({ name, mode }) => {
-    playerName = name.trim() || 'Player';
+    if (typeof name !== 'string') name = '';
+    playerName = name.trim().slice(0, 30) || 'Player';
     let room = Object.values(rooms).find(r => r.players.length === 1 && !r.solo && r.mode === mode && !r.started);
     if (!room) {
       roomIdCounter++;
@@ -338,7 +339,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('joinSolo', ({ name, mode }) => {
-    playerName = name.trim() || 'Player';
+    if (typeof name !== 'string') name = '';
+    playerName = name.trim().slice(0, 30) || 'Player';
     roomIdCounter++;
     const room = {
       id: `solo-${roomIdCounter}`,

@@ -90,6 +90,21 @@ jobs:
           echo "any=$ANY" >> "$GITHUB_OUTPUT"
           echo "Changed files:"; echo "$CHANGED"
 
+      - name: Validate inputs
+        run: |
+          if [ -n "${{ inputs.key_name }}" ]; then
+            if ! echo "${{ inputs.key_name }}" | grep -qE '^[a-zA-Z0-9_.-]+$'; then
+              echo "Invalid key_name: only alphanumeric, hyphens, underscores, and dots allowed"
+              exit 1
+            fi
+          fi
+          if [ -n "${{ inputs.instance_type }}" ]; then
+            if ! echo "${{ inputs.instance_type }}" | grep -qE '^[a-z0-9.]+$'; then
+              echo "Invalid instance_type"
+              exit 1
+            fi
+          fi
+
       - name: Build Terraform vars
         id: tf-vars
         run: |
@@ -147,7 +162,7 @@ jobs:
         shell: bash
         run: |
           IP=${{ steps.ec2.outputs.public_ip }}
-          SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i ${{ steps.ssh.outputs.file }} ubuntu@${IP}"
+          SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -i ${{ steps.ssh.outputs.file }} ubuntu@${IP}"
           echo "Waiting for SSH + cluster ready on ${IP}..."
           for i in $(seq 1 90); do
             READY=$(${SSH} "kubectl get nodes 2>/dev/null | wc -l" 2>/dev/null || echo "0")
@@ -193,8 +208,8 @@ jobs:
         shell: bash
         run: |
           IP=${{ steps.ec2.outputs.public_ip }}
-          SSH="ssh -o StrictHostKeyChecking=no -i ${{ steps.ssh.outputs.file }} ubuntu@${IP}"
-          SCP="scp -o StrictHostKeyChecking=no -i ${{ steps.ssh.outputs.file }}"
+          SSH="ssh -o StrictHostKeyChecking=accept-new -i ${{ steps.ssh.outputs.file }} ubuntu@${IP}"
+          SCP="scp -o StrictHostKeyChecking=accept-new -i ${{ steps.ssh.outputs.file }}"
 
           ${SSH} "mkdir -p /home/ubuntu/manifests"
           for F in deploy/k8s/*.yaml; do
@@ -214,7 +229,7 @@ jobs:
         shell: bash
         run: |
           IP=${{ steps.ec2.outputs.public_ip }}
-          SSH="ssh -o StrictHostKeyChecking=no -i ${{ steps.ssh.outputs.file }} ubuntu@${IP}"
+          SSH="ssh -o StrictHostKeyChecking=accept-new -i ${{ steps.ssh.outputs.file }} ubuntu@${IP}"
 
           echo "=== Backend rollout ==="
           ${SSH} "kubectl rollout status deployment/snake-backend -n snake-game --timeout=120s"
