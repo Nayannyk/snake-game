@@ -108,6 +108,7 @@ jobs:
 
       - name: Write SSH key
         id: ssh
+        continue-on-error: true
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           KEY=$(terraform output -raw private_key_pem 2>/dev/null || echo "")
@@ -119,11 +120,11 @@ jobs:
             chmod 600 /tmp/ssh-key.pem
             echo "file=/tmp/ssh-key.pem" >> "$GITHUB_OUTPUT"
           else
-            echo "No SSH key available" >&2
-            exit 1
+            echo "No SSH key available — SSH-dependent steps will be skipped"
           fi
 
       - name: Wait for EC2 + Kind cluster
+        if: steps.ssh.outputs.file != ''
         shell: bash
         run: |
           IP=${{ steps.ec2.outputs.public_ip }}
@@ -169,6 +170,7 @@ jobs:
             ${{ env.DOCKER_REGISTRY }}/snake-frontend:${{ steps.tf-vars.outputs.tag }}
 
       - name: Deploy to Kind
+        if: steps.ssh.outputs.file != ''
         shell: bash
         run: |
           IP=${{ steps.ec2.outputs.public_ip }}
@@ -185,6 +187,7 @@ jobs:
           ${SSH} "kubectl apply -f /home/ubuntu/manifests/"
 
       - name: Verify
+        if: steps.ssh.outputs.file != ''
         shell: bash
         run: |
           IP=${{ steps.ec2.outputs.public_ip }}
@@ -201,6 +204,7 @@ jobs:
           ${SSH} "kubectl get ingress -n snake-game"
 
       - name: Smoke test
+        if: steps.ssh.outputs.file != ''
         shell: bash
         run: |
           sleep 10
@@ -217,10 +221,14 @@ jobs:
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| Environment | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Game URL | http://${{ steps.ec2.outputs.public_ip }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| SSH | \`ssh -i <key> ubuntu@${{ steps.ec2.outputs.public_ip }}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ steps.ssh.outputs.file }}" ]; then
+            echo "| SSH | \`ssh -i <key> ubuntu@${{ steps.ec2.outputs.public_ip }}\` |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| SSH | Skipped (no key available — SSH manually using your key) |" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "| Image Tag | ${{ env.IMAGE_TAG }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "To destroy, run this workflow again or \`terraform destroy\` in \`${{ env.TF_WORKING_DIR }}\`." >> $GITHUB_STEP_SUMMARY
+          echo "To destroy, run \`terraform destroy\` in \`${{ env.TF_WORKING_DIR }}\`." >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup runner
         if: always()
