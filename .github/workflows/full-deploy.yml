@@ -202,8 +202,12 @@ jobs:
           SCP="scp -o StrictHostKeyChecking=no -i ${{ steps.ssh.outputs.file }}"
 
           ${SSH} "mkdir -p /home/ubuntu/manifests"
-          ${SCP} deploy/k8s/*.yaml ubuntu@${IP}:/home/ubuntu/manifests/
-          ${SSH} "kubectl apply -f /home/ubuntu/manifests/namespace.yaml"
+          for F in deploy/k8s/*.yaml; do
+            case "$(basename "$F")" in
+              kind-config.yaml) ;;
+              *) ${SCP} "$F" ubuntu@${IP}:/home/ubuntu/manifests/ ;;
+            esac
+          done
           ${SSH} "kubectl apply -f /home/ubuntu/manifests/"
 
       - name: Verify
