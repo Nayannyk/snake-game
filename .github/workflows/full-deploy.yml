@@ -15,7 +15,7 @@ on:
       instance_type:
         description: EC2 instance type
         required: false
-        default: t2.micro
+        default: t3.micro
 
 env:
   AWS_REGION: ap-south-1
