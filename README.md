@@ -13,38 +13,43 @@ Multiplayer snake game with bot AI, deployed on Kind Kubernetes with CI/CD pipel
 ## Project Structure
 
 ```
-snake-game-kube/
-├── backend/              # Node.js game server (Express + Socket.io)
+snake-game/
+├── backend/                     # Node.js game server (Express + Socket.io)
 │   ├── Dockerfile
 │   ├── package.json
 │   └── server.js
-├── frontend/             # Client-side game (HTML5 Canvas)
+├── frontend/                    # Client-side game (HTML5 Canvas)
 │   ├── Dockerfile
 │   ├── index.html
 │   ├── nginx.conf
 │   ├── script.js
 │   └── style.css
-├── kubernetes/           # K8s manifests
-│   ├── namespace.yaml
-│   ├── backend-deployment.yaml
-│   ├── frontend-deployment.yaml
-│   ├── hpa.yaml
-│   └── ingress.yaml
-├── terraform/            # Terraform reusable modules
-│   ├── main.tf
-│   ├── providers.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   ├── modules/app-deployment/
-│   └── environments/{dev,prod}/
-├── scripts/              # Build/deploy/test helpers
+├── deploy/                      # All deployment & infrastructure artifacts
+│   ├── k8s/                     # Kubernetes manifests + Kind config
+│   │   ├── namespace.yaml
+│   │   ├── backend-deployment.yaml
+│   │   ├── frontend-deployment.yaml
+│   │   ├── hpa.yaml
+│   │   ├── ingress.yaml
+│   │   └── kind-config.yaml
+│   ├── terraform/               # Infrastructure as Code (Terraform)
+│   │   ├── main.tf
+│   │   ├── providers.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   ├── modules/app-deployment/
+│   │   └── environments/{dev,prod}/
+│   └── docker-compose.yml       # Local dev (bypasses K8s)
+├── scripts/                     # Build/deploy/test helpers
 │   ├── build.sh
 │   ├── deploy.sh
 │   └── test.sh
-├── jenkins/              # Jenkins pipeline config
-│   └── snake-game-pipeline.xml
-├── docker-compose.yml    # Local dev (bypasses K8s)
-├── Jenkinsfile           # CI/CD pipeline definition
+├── ci/                          # CI/CD pipeline configuration
+│   ├── Jenkinsfile
+│   └── jenkins/
+│       └── snake-game-pipeline.xml
+├── Makefile                     # Standard build automation
+├── .gitignore
 └── README.md
 ```
 
@@ -68,61 +73,40 @@ snake-game-kube/
 ## Quick Start (Local Dev)
 
 ```bash
-docker-compose up --build
+# Using Make:
+make dev
+
+# Or directly:
+docker compose -f deploy/docker-compose.yml up --build
 # Frontend: http://localhost:8080
 # Backend:  http://localhost:3000
 ```
 
 ## Deploy to Kind
 
-### 1. Create Kind Cluster
+### 1. Create Kind Cluster (one command)
 
 ```bash
-kind create cluster --config kind-config.yaml
+make cluster-create
 ```
 
-This creates a 3-node cluster with port 80 and 443 mapped from the host to `kind-worker`, so the ingress is accessible at `http://localhost`.
+This creates a 3-node Kind cluster with port 80/443 mapped to the host, installs the NGINX Ingress Controller, and deploys the Metrics Server for HPA support.
 
-### 2. Label Worker Nodes for Ingress
+### 2. Deploy the Application
 
 ```bash
-kubectl label node kind-worker ingress-ready=true
-kubectl label node kind-worker2 ingress-ready=true
+# Via Makefile:
+make deploy
+
+# Or step by step with raw kubectl:
+kubectl apply -f deploy/k8s/namespace.yaml
+kubectl apply -f deploy/k8s/backend-deployment.yaml
+kubectl apply -f deploy/k8s/frontend-deployment.yaml
+kubectl apply -f deploy/k8s/ingress.yaml
+kubectl apply -f deploy/k8s/hpa.yaml
 ```
 
-### 3. Install NGINX Ingress Controller
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml
-kubectl wait --namespace ingress-nginx --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller --timeout=120s
-```
-
-### 4. Install Metrics Server (for HPA)
-
-```bash
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-kubectl patch deployment metrics-server -n kube-system --type='json' \
-  -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
-kubectl wait --namespace kube-system --for=condition=ready pod \
-  --selector=k8s-app=metrics-server --timeout=120s
-```
-
-### 5. Deploy the Application
-
-```bash
-# One-shot deploy (builds images and runs Terraform)
-./scripts/deploy.sh dev latest
-
-# Or step by step:
-kubectl apply -f kubernetes/namespace.yaml
-kubectl apply -f kubernetes/backend-deployment.yaml
-kubectl apply -f kubernetes/frontend-deployment.yaml
-kubectl apply -f kubernetes/ingress.yaml
-kubectl apply -f kubernetes/hpa.yaml
-```
-
-### 6. Verify
+### 3. Verify
 
 ```bash
 # Check all pods are running
@@ -138,9 +122,21 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost/api/scores
 
 Open **http://localhost** in your browser to play.
 
+### Other Make Targets
+
+| Target           | Description                              |
+|------------------|------------------------------------------|
+| `make build`     | Build and push Docker images             |
+| `make deploy`    | Deploy to Kind via Terraform             |
+| `make test`      | Run smoke tests                          |
+| `make dev`       | Run locally with Docker Compose          |
+| `make cluster-delete` | Delete the Kind cluster             |
+
 ## CI/CD Pipeline (Jenkins)
 
-The Jenkinsfile defines 9 stages:
+Pipeline definition: [`ci/Jenkinsfile`](ci/Jenkinsfile)
+
+Defines 10 stages:
 1. Checkout
 2. Unit Tests
 3. Build & Push Docker Images

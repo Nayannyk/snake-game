@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_REGISTRY = 'nayannyk'
         IMAGE_TAG = "${env.BRANCH_NAME == 'main' ? 'stable' : 'develop'}"
-        TF_DIR = "${WORKSPACE}/terraform/environments/${env.BRANCH_NAME == 'main' ? 'prod' : 'dev'}"
+        TF_DIR = "${WORKSPACE}/deploy/terraform/environments/${env.BRANCH_NAME == 'main' ? 'prod' : 'dev'}"
         KUBECONFIG = "${HOME}/.kube/config"
         KIND_CLUSTER = "kind-workers"
     }

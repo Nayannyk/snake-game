@@ -5,7 +5,7 @@ ENVIRONMENT=${1:-dev}
 IMAGE_TAG=${2:-latest}
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-nayannyk}
 KIND_CLUSTER=${KIND_CLUSTER:-kind-workers}
-TF_DIR="terraform/environments/${ENVIRONMENT}"
+TF_DIR="deploy/terraform/environments/${ENVIRONMENT}"
 
 echo "=== Deploying Snake Game to Kind cluster ==="
 echo "Environment: ${ENVIRONMENT}"
