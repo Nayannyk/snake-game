@@ -80,7 +80,9 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           VARS="-var=environment=${{ inputs.environment }} -var=instance_type=${{ inputs.instance_type }}"
           if [ -n "${{ inputs.key_name }}" ]; then
-            VARS="$VARS -var=key_name=${{ inputs.key_name }}"
+            KEY="${{ inputs.key_name }}"
+            KEY="${KEY%.pem}"
+            VARS="$VARS -var=key_name=$KEY"
           fi
           echo "value=${VARS}" >> "$GITHUB_OUTPUT"
 
