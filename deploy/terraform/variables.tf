@@ -19,7 +19,7 @@ variable "kubeconfig_context" {
 variable "docker_registry" {
   description = "Docker registry (DockerHub username)"
   type        = string
-  default     = "nayannyk"
+  default     = "<your-dockerhub-username>"
 }
 
 variable "image_tag" {

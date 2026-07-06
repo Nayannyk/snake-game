@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: nayannyk/snake-backend:latest
+        image: <your-dockerhub-username>/snake-backend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000

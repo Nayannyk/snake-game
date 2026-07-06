@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = 'nayannyk'
+        DOCKER_REGISTRY = 'your-dockerhub-username'
         IMAGE_TAG = "${env.BRANCH_NAME == 'main' ? 'stable' : 'develop'}"
         TF_DIR = "${WORKSPACE}/deploy/terraform/environments/${env.BRANCH_NAME == 'main' ? 'prod' : 'dev'}"
         KUBECONFIG = "${HOME}/.kube/config"

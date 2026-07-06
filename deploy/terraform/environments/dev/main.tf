@@ -2,7 +2,7 @@ module "snake_game" {
   source = "../../"
 
   environment            = "dev"
-  docker_registry        = "nayannyk"
+  docker_registry        = "<your-dockerhub-username>"
   image_tag              = "develop"
   backend_replicas       = 1
   frontend_replicas      = 1
