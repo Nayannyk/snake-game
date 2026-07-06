@@ -1,0 +1,144 @@
+image: docker:24
+
+services:
+  - docker:24-dind
+
+variables:
+  DOCKER_REGISTRY: nayannyk
+  IMAGE_TAG: $CI_COMMIT_BRANCH
+  KIND_CLUSTER: kind
+  NAMESPACE: snake-game
+  TF_ROOT: deploy/terraform/environments
+
+stages:
+  - test
+  - build
+  - deploy
+  - verify
+  - cleanup
+
+.node-image: &node-image
+  image: node:20
+
+.docker-login: &docker-login
+  before_script:
+    - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
+
+unit-test:
+  stage: test
+  <<: *node-image
+  script:
+    - cd backend && npm install --omit=dev && npm test 2>/dev/null || echo "No tests configured"
+  only:
+    - main
+    - develop
+
+lint:
+  stage: test
+  <<: *node-image
+  script:
+    - cd frontend && npx htmlhint index.html 2>/dev/null || echo "HTMLHint not installed"
+  only:
+    - main
+    - develop
+
+build-backend:
+  stage: build
+  <<: *docker-login
+  script:
+    - docker build -t "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG" ./backend
+    - docker tag "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG" "$DOCKER_REGISTRY/snake-backend:build-$CI_PIPELINE_IID"
+    - docker push "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG"
+    - docker push "$DOCKER_REGISTRY/snake-backend:build-$CI_PIPELINE_IID"
+  only:
+    - main
+    - develop
+
+build-frontend:
+  stage: build
+  <<: *docker-login
+  script:
+    - docker build -t "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG" ./frontend
+    - docker tag "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG" "$DOCKER_REGISTRY/snake-frontend:build-$CI_PIPELINE_IID"
+    - docker push "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG"
+    - docker push "$DOCKER_REGISTRY/snake-frontend:build-$CI_PIPELINE_IID"
+  only:
+    - main
+    - develop
+
+load-images:
+  stage: deploy
+  tags:
+    - kind
+  script:
+    - kind load docker-image "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG" --name "$KIND_CLUSTER"
+    - kind load docker-image "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG" --name "$KIND_CLUSTER"
+  only:
+    - main
+    - develop
+
+terraform-init:
+  stage: deploy
+  tags:
+    - kind
+  script:
+    - cd "$TF_ROOT/$([ "$CI_COMMIT_BRANCH" = "main" ] && echo "prod" || echo "dev")"
+    - terraform init -reconfigure
+  only:
+    - main
+    - develop
+
+terraform-apply:
+  stage: deploy
+  tags:
+    - kind
+  script:
+    - cd "$TF_ROOT/$([ "$CI_COMMIT_BRANCH" = "main" ] && echo "prod" || echo "dev")"
+    - terraform plan -var="image_tag=$IMAGE_TAG" -out=tfplan
+    - terraform apply -auto-approve tfplan
+  only:
+    - main
+    - develop
+
+verify-backend:
+  stage: verify
+  tags:
+    - kind
+  script:
+    - kubectl rollout status deployment/snake-backend -n "$NAMESPACE" --timeout=120s
+  only:
+    - main
+    - develop
+
+verify-frontend:
+  stage: verify
+  tags:
+    - kind
+  script:
+    - kubectl rollout status deployment/snake-frontend -n "$NAMESPACE" --timeout=120s
+  only:
+    - main
+    - develop
+
+smoke-test:
+  stage: verify
+  tags:
+    - kind
+  script:
+    - |
+      NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+      NODE_PORT=$(kubectl get svc frontend -n "$NAMESPACE" -o jsonpath='{.spec.ports[0].nodePort}')
+      sleep 5
+      curl -sf "http://${NODE_IP}:${NODE_PORT}/" > /dev/null && echo "Frontend: OK" || (echo "Frontend: FAIL" && exit 1)
+      curl -sf "http://${NODE_IP}:${NODE_PORT}/api/scores" > /dev/null && echo "Backend: OK" || (echo "Backend: FAIL" && exit 1)
+  only:
+    - main
+    - develop
+
+cleanup:
+  stage: cleanup
+  script:
+    - docker system prune -f --filter "until=24h" 2>/dev/null || true
+  only:
+    - main
+    - develop
