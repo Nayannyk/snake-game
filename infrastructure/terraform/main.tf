@@ -122,7 +122,8 @@ resource "aws_instance" "kind" {
     volume_size = var.root_volume_size
   }
 
-  user_data = file("${path.module}/user-data.sh")
+  # Test: remove user_data to see if instance launches without it
+  # user_data = file("${path.module}/user-data.sh")
 
   tags = merge(var.tags, {
     Name = local.instance_name
