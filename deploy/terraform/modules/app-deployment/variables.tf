@@ -4,7 +4,7 @@ variable "environment" {
 }
 
 variable "docker_registry" {
-  description = "Docker registry URL (e.g., nayannyk)"
+  description = "Docker registry URL (e.g., your-dockerhub-username)"
   type        = string
 }
 
