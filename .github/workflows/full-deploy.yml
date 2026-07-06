@@ -78,7 +78,7 @@ jobs:
           # Use "latest" if no app code changed (images already on Docker Hub)
           if [ "${{ steps.changes.outputs.any }}" = "false" ]; then TAG="latest"; fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          VARS="-var=environment=${{ inputs.environment }} -var=instance_type=${{ inputs.instance_type }} -var=image_tag=${TAG}"
+          VARS="-var=environment=${{ inputs.environment }} -var=instance_type=${{ inputs.instance_type }}"
           if [ -n "${{ inputs.key_name }}" ]; then
             VARS="$VARS -var=key_name=${{ inputs.key_name }}"
           fi
