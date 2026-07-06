@@ -22,7 +22,7 @@ env:
   TF_WORKING_DIR: infrastructure/terraform
   DOCKER_REGISTRY: nayannyk
   IMAGE_TAG: build-${{ github.run_number }}
-  CACHE_KEY: tf-state-${{ github.workflow }}
+  TF_STATE_BASE: snake-game-tfstate
 
 jobs:
   deploy:
@@ -43,6 +43,17 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Prepare S3 backend
+        id: backend
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET="${TF_STATE_BASE}-${ACCOUNT_ID}"
+          echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
+          if ! aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            echo "Creating S3 bucket: $BUCKET"
+            aws s3 mb "s3://${BUCKET}" --region "$AWS_REGION"
+          fi
+
       - name: Build Terraform vars
         id: tf-vars
         run: |
@@ -52,25 +63,32 @@ jobs:
           fi
           echo "value=${VARS}" >> "$GITHUB_OUTPUT"
 
-      # Restore Terraform state from previous run so we can destroy old infra
-      - name: Restore Terraform state
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.TF_WORKING_DIR }}/terraform.tfstate
-            ${{ env.TF_WORKING_DIR }}/terraform.tfstate.backup
-            ${{ env.TF_WORKING_DIR }}/.terraform
-          key: ${{ env.CACHE_KEY }}
-
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init -reconfigure
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=${{ steps.backend.outputs.bucket }}" \
+            -backend-config="key=infrastructure/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
 
-      - name: Terraform Destroy
+      - name: Clean up orphaned resources
         continue-on-error: true
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform destroy -auto-approve ${{ steps.tf-vars.outputs.value }}
+        run: |
+          ENV="${{ inputs.environment }}"
+          NAME="snake-game-kind-${ENV}"
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${NAME}" "Name=instance-state-name,Values=running,pending,stopping,stopped" \
+            --query "Reservations[*].Instances[*].InstanceId" --output text)
+          if [ -n "$INSTANCE_ID" ]; then
+            echo "Terminating existing EC2 instance: $INSTANCE_ID"
+            aws ec2 terminate-instances --instance-ids "$INSTANCE_ID"
+            aws ec2 wait instance-terminated --instance-ids "$INSTANCE_ID"
+          fi
+          SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${NAME}" --query "SecurityGroups[*].GroupId" --output text)
+          if [ -n "$SG_ID" ]; then
+            echo "Deleting security group: $SG_ID"
+            aws ec2 delete-security-group --group-id "$SG_ID"
+          fi
 
       - name: Terraform Apply
         id: apply
