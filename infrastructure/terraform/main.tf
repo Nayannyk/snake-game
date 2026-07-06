@@ -142,9 +142,7 @@ resource "aws_instance" "kind" {
     encrypted   = true
   }
 
-  user_data = templatefile("${path.module}/user-data.sh", {
-    environment = var.environment
-  })
+  user_data = file("${path.module}/user-data.sh")
 
   tags = merge(var.tags, {
     Name = local.instance_name
