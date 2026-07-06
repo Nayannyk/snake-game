@@ -98,6 +98,10 @@ data "aws_vpc" "default" {
   default = true
 }
 
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
@@ -105,10 +109,22 @@ data "aws_subnets" "default" {
   }
 }
 
+data "aws_subnets" "az" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+  filter {
+    name   = "availability-zone"
+    values = [data.aws_availability_zones.available.names[0]]
+  }
+}
+
 resource "aws_instance" "kind" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
-  subnet_id              = data.aws_subnets.default.ids[0]
+  subnet_id              = data.aws_subnets.az.ids[0]
+  availability_zone      = data.aws_availability_zones.available.names[0]
   vpc_security_group_ids = [aws_security_group.kind.id]
   key_name               = var.key_name != "" ? var.key_name : aws_key_pair.kind[0].key_name
 
@@ -116,6 +132,7 @@ resource "aws_instance" "kind" {
 
   root_block_device {
     volume_size = var.root_volume_size
+    volume_type = "gp3"
   }
 
   user_data = file("${path.module}/user-data.sh")
