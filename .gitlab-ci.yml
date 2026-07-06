@@ -4,7 +4,7 @@ services:
   - docker:24-dind
 
 variables:
-  DOCKER_REGISTRY: nayannyk
+  DOCKER_REGISTRY: your-dockerhub-username
   IMAGE_TAG: $CI_COMMIT_BRANCH
   KIND_CLUSTER: kind
   NAMESPACE: snake-game
