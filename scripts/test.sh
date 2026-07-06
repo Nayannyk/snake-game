@@ -8,7 +8,7 @@ NAMESPACE="snake-game"
 
 if ! kubectl get ns "$NAMESPACE" &>/dev/null; then
     echo "FAIL: Namespace '$NAMESPACE' not found."
-    echo "Run 'kubectl apply -f deploy/k8s/namespace.yaml' first or use Terraform."
+    echo "Run 'kubectl apply -f deploy/k8s/namespace.yaml' first."
     exit 1
 fi
 echo "PASS: Namespace '$NAMESPACE' exists."

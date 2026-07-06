@@ -5,10 +5,8 @@ services:
 
 variables:
   DOCKER_REGISTRY: nayannyk
-  IMAGE_TAG: $CI_COMMIT_BRANCH
-  KIND_CLUSTER: kind
+  IMAGE_TAG: build-$CI_PIPELINE_IID
   NAMESPACE: snake-game
-  TF_ROOT: deploy/terraform/environments
 
 stages:
   - test
@@ -47,9 +45,9 @@ build-backend:
   <<: *docker-login
   script:
     - docker build -t "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG" ./backend
-    - docker tag "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG" "$DOCKER_REGISTRY/snake-backend:build-$CI_PIPELINE_IID"
+    - docker tag "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG" "$DOCKER_REGISTRY/snake-backend:latest"
     - docker push "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG"
-    - docker push "$DOCKER_REGISTRY/snake-backend:build-$CI_PIPELINE_IID"
+    - docker push "$DOCKER_REGISTRY/snake-backend:latest"
   only:
     - main
     - develop
@@ -59,43 +57,23 @@ build-frontend:
   <<: *docker-login
   script:
     - docker build -t "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG" ./frontend
-    - docker tag "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG" "$DOCKER_REGISTRY/snake-frontend:build-$CI_PIPELINE_IID"
+    - docker tag "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG" "$DOCKER_REGISTRY/snake-frontend:latest"
     - docker push "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG"
-    - docker push "$DOCKER_REGISTRY/snake-frontend:build-$CI_PIPELINE_IID"
+    - docker push "$DOCKER_REGISTRY/snake-frontend:latest"
   only:
     - main
     - develop
 
-load-images:
+deploy:
   stage: deploy
   tags:
     - kind
   script:
-    - kind load docker-image "$DOCKER_REGISTRY/snake-backend:$IMAGE_TAG" --name "$KIND_CLUSTER"
-    - kind load docker-image "$DOCKER_REGISTRY/snake-frontend:$IMAGE_TAG" --name "$KIND_CLUSTER"
-  only:
-    - main
-    - develop
-
-terraform-init:
-  stage: deploy
-  tags:
-    - kind
-  script:
-    - cd "$TF_ROOT/$([ "$CI_COMMIT_BRANCH" = "main" ] && echo "prod" || echo "dev")"
-    - terraform init -reconfigure
-  only:
-    - main
-    - develop
-
-terraform-apply:
-  stage: deploy
-  tags:
-    - kind
-  script:
-    - cd "$TF_ROOT/$([ "$CI_COMMIT_BRANCH" = "main" ] && echo "prod" || echo "dev")"
-    - terraform plan -var="image_tag=$IMAGE_TAG" -out=tfplan
-    - terraform apply -auto-approve tfplan
+    - kubectl apply -f deploy/k8s/namespace.yaml
+    - kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/$NAMESPACE --timeout=30s
+    - kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml
+    - kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+    - kubectl apply -f deploy/k8s/
   only:
     - main
     - develop
@@ -129,6 +107,7 @@ smoke-test:
       NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
       NODE_PORT=$(kubectl get svc frontend -n "$NAMESPACE" -o jsonpath='{.spec.ports[0].nodePort}')
       sleep 5
+      echo "Testing frontend at http://${NODE_IP}:${NODE_PORT}/ ..."
       curl -sf "http://${NODE_IP}:${NODE_PORT}/" > /dev/null && echo "Frontend: OK" || (echo "Frontend: FAIL" && exit 1)
       curl -sf "http://${NODE_IP}:${NODE_PORT}/api/scores" > /dev/null && echo "Backend: OK" || (echo "Backend: FAIL" && exit 1)
   only:

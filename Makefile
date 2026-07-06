@@ -4,18 +4,19 @@ build:
 	./scripts/build.sh
 
 deploy:
-	./scripts/deploy.sh
+	kubectl apply -f deploy/k8s/namespace.yaml
+	kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/snake-game --timeout=30s
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml
+	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+	kubectl apply -f deploy/k8s/
 
 test:
 	./scripts/test.sh
 
 cluster-create:
 	kind create cluster --config deploy/k8s/kind-config.yaml
-	kubectl label node kind-worker ingress-ready=true
-	kubectl label node kind-worker2 ingress-ready=true
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml
-	kubectl wait --namespace ingress-nginx --for=condition=ready pod \
-	  --selector=app.kubernetes.io/component=controller --timeout=120s
+	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
 	kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 	kubectl patch deployment metrics-server -n kube-system --type='json' \
 	  -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
@@ -31,7 +32,7 @@ dev:
 help:
 	@echo "Targets:"
 	@echo "  build          - Build Docker images"
-	@echo "  deploy         - Deploy to Kind via Terraform"
+	@echo "  deploy         - Deploy to Kind via kubectl manifests"
 	@echo "  test           - Run smoke tests"
 	@echo "  cluster-create - Create Kind cluster with ingress + metrics-server"
 	@echo "  cluster-delete - Delete Kind cluster"
