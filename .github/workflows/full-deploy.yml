@@ -109,6 +109,17 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform destroy -auto-approve ${{ steps.tf-vars.outputs.value }}
 
+      - name: Diagnostic — test launch with same params
+        continue-on-error: true
+        run: |
+          echo "Testing t2.micro launch with Terraform's subnet..."
+          aws ec2 run-instances \
+            --image-id ami-001e7cc215773c7fb \
+            --instance-type t2.micro \
+            --region ap-south-1 \
+            --output text --query "Instances[0].InstanceId" 2>&1 && \
+          echo "SUCCESS" || echo "FAILED with above error"
+
       - name: Terraform Apply
         id: apply
         working-directory: ${{ env.TF_WORKING_DIR }}
