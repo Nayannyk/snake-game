@@ -11,7 +11,7 @@ on:
         required: true
         default: dev
       key_name:
-        description: Existing AWS key pair name (optional; falls back to AWS_KEY_NAME secret)
+        description: Existing AWS key pair name (optional; blank lets Terraform create one)
         required: false
         default: ""
       instance_type:
@@ -107,9 +107,6 @@ jobs:
 
       - name: Build Terraform vars
         id: tf-vars
-        env:
-          AWS_KEY_NAME: ${{ secrets.AWS_KEY_NAME }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           TAG="${{ env.IMAGE_TAG }}"
           # Use "latest" if no app code changed (images already on Docker Hub)
@@ -119,42 +116,16 @@ jobs:
           INST="${{ inputs.instance_type || 't2.medium' }}"
           VARS="-var=environment=${ENV} -var=instance_type=${INST}"
           KEY_NAME="${{ inputs.key_name }}"
-          if [ -z "$KEY_NAME" ]; then
-            KEY_NAME="$AWS_KEY_NAME"
-          fi
-          if [ -z "$KEY_NAME" ] && [ -n "$SSH_PRIVATE_KEY" ]; then
-            KEY_NAME="snake-game-kind-${ENV}"
-          fi
           if [ -n "$KEY_NAME" ]; then
             KEY_NAME="${KEY_NAME%.pem}"
             if ! echo "$KEY_NAME" | grep -qE '^[a-zA-Z0-9_.-]+$'; then
-              echo "Invalid resolved key name: only alphanumeric, hyphens, underscores, and dots allowed"
+              echo "Invalid key_name: only alphanumeric, hyphens, underscores, and dots allowed"
               exit 1
             fi
             VARS="$VARS -var=key_name=$KEY_NAME"
           fi
-          echo "key_name=${KEY_NAME}" >> "$GITHUB_OUTPUT"
           echo "value=${VARS}" >> "$GITHUB_OUTPUT"
 
-      - name: Import SSH key pair
-        if: steps.tf-vars.outputs.key_name != ''
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          KEY_NAME: ${{ steps.tf-vars.outputs.key_name }}
-        run: |
-          if [ -z "$SSH_PRIVATE_KEY" ]; then
-            echo "No SSH_PRIVATE_KEY secret provided; assuming AWS key pair '$KEY_NAME' already exists"
-            exit 0
-          fi
-          printf '%s\n' "$SSH_PRIVATE_KEY" > /tmp/ssh-key.pem
-          chmod 600 /tmp/ssh-key.pem
-          ssh-keygen -y -f /tmp/ssh-key.pem > /tmp/ssh-key.pub
-          if aws ec2 describe-key-pairs --key-names "$KEY_NAME" >/dev/null 2>&1; then
-            echo "AWS key pair '$KEY_NAME' already exists"
-          else
-            aws ec2 import-key-pair --key-name "$KEY_NAME" --public-key-material "fileb:///tmp/ssh-key.pub" >/dev/null
-            echo "Imported AWS key pair '$KEY_NAME' from SSH_PRIVATE_KEY"
-          fi
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
@@ -179,21 +150,14 @@ jobs:
         id: ssh
         continue-on-error: true
         working-directory: ${{ env.TF_WORKING_DIR }}
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          KEY="$SSH_PRIVATE_KEY"
-          if [ -z "$KEY" ]; then
-            KEY=$(terraform output -raw private_key_pem 2>/dev/null || echo "")
-          fi
-          if [ -n "$KEY" ] && [ -n "${{ steps.tf-vars.outputs.key_name }}" ]; then
+          KEY=$(terraform output -raw private_key_pem 2>/dev/null || echo "")
+          if [ -n "$KEY" ]; then
             printf '%s\n' "$KEY" > /tmp/ssh-key.pem
             chmod 600 /tmp/ssh-key.pem
             echo "file=/tmp/ssh-key.pem" >> "$GITHUB_OUTPUT"
-          elif [ -n "$KEY" ]; then
-            echo "SSH key exists, but no EC2 key pair name was configured - SSH-dependent steps will be skipped"
           else
-            echo "No SSH key available - SSH-dependent steps will be skipped"
+            echo "No Terraform-generated SSH key available - SSH-dependent steps will be skipped"
           fi
 
       - name: Wait for EC2 + Kind cluster

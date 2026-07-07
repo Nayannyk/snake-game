@@ -5,10 +5,14 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
   }
 
   backend "s3" {
-    # Partial configuration — bucket, key, region passed via -backend-config
+    # Partial configuration - bucket, key, region passed via -backend-config
   }
 }
 

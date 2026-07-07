@@ -1,5 +1,6 @@
 locals {
-  instance_name = "snake-game-kind-${var.environment}"
+  instance_name      = "snake-game-kind-${var.environment}"
+  generated_key_name = "snake-game-kind-${var.environment}-key"
 }
 
 # ---------------------------------------------------------------------------
@@ -81,11 +82,27 @@ data "aws_subnets" "default" {
   }
 }
 
+resource "tls_private_key" "default" {
+  count     = var.key_name == "" ? 1 : 0
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "default" {
+  count      = var.key_name == "" ? 1 : 0
+  key_name   = local.generated_key_name
+  public_key = tls_private_key.default[0].public_key_openssh
+
+  tags = merge(var.tags, {
+    Name = local.generated_key_name
+  })
+}
+
 resource "aws_instance" "kind" {
   ami           = data.aws_ssm_parameter.ubuntu_ami.value
   instance_type = var.instance_type
   subnet_id     = data.aws_subnets.default.ids[0]
-  key_name      = var.key_name != "" ? var.key_name : null
+  key_name      = var.key_name != "" ? var.key_name : aws_key_pair.default[0].key_name
 
   vpc_security_group_ids = [aws_security_group.kind.id]
 

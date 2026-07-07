@@ -20,7 +20,7 @@ output "security_group_id" {
 
 output "ssh_command" {
   description = "SSH command to connect to the instance"
-  value       = var.key_name != "" ? "ssh -i ${var.key_name}.pem ubuntu@${aws_instance.kind.public_ip}" : ""
+  value       = "ssh -i <key> ubuntu@${aws_instance.kind.public_ip}"
 }
 
 output "game_url" {
@@ -30,11 +30,11 @@ output "game_url" {
 
 output "key_pair_name" {
   description = "Name of the SSH key pair"
-  value       = var.key_name
+  value       = var.key_name != "" ? var.key_name : aws_key_pair.default[0].key_name
 }
 
 output "private_key_pem" {
-  description = "Private key PEM (always empty — user provides their own key via secrets)"
-  value       = ""
+  description = "Terraform-generated private key PEM. Empty when an external key_name is provided."
+  value       = var.key_name == "" ? tls_private_key.default[0].private_key_pem : ""
   sensitive   = true
 }
