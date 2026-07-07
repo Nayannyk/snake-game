@@ -1,6 +1,5 @@
 locals {
-  instance_name      = "snake-game-kind-${var.environment}"
-  generated_key_name = "snake-game-kind-${var.environment}-key"
+  instance_name = "snake-game-kind-${var.environment}"
 }
 
 # ---------------------------------------------------------------------------
@@ -75,10 +74,39 @@ data "aws_ssm_parameter" "ubuntu_ami" {
   name = "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
 }
 
-data "aws_subnets" "default" {
+data "aws_ec2_instance_type_offerings" "selected" {
+  filter {
+    name   = "instance-type"
+    values = [var.instance_type]
+  }
+
+  location_type = "availability-zone"
+}
+
+data "aws_subnets" "compatible_default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
+  }
+
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
+  }
+
+  filter {
+    name   = "availability-zone"
+    values = data.aws_ec2_instance_type_offerings.selected.locations
+  }
+}
+
+resource "random_id" "key_suffix" {
+  count       = var.key_name == "" ? 1 : 0
+  byte_length = 4
+
+  keepers = {
+    environment   = var.environment
+    instance_name = local.instance_name
   }
 }
 
@@ -90,18 +118,18 @@ resource "tls_private_key" "default" {
 
 resource "aws_key_pair" "default" {
   count      = var.key_name == "" ? 1 : 0
-  key_name   = local.generated_key_name
+  key_name   = "${local.instance_name}-${random_id.key_suffix[0].hex}-key"
   public_key = tls_private_key.default[0].public_key_openssh
 
   tags = merge(var.tags, {
-    Name = local.generated_key_name
+    Name = "${local.instance_name}-${random_id.key_suffix[0].hex}-key"
   })
 }
 
 resource "aws_instance" "kind" {
   ami           = data.aws_ssm_parameter.ubuntu_ami.value
   instance_type = var.instance_type
-  subnet_id     = data.aws_subnets.default.ids[0]
+  subnet_id     = sort(data.aws_subnets.compatible_default.ids)[0]
   key_name      = var.key_name != "" ? var.key_name : aws_key_pair.default[0].key_name
 
   vpc_security_group_ids = [aws_security_group.kind.id]
@@ -123,6 +151,11 @@ resource "aws_instance" "kind" {
   }
 
   lifecycle {
+    precondition {
+      condition     = length(data.aws_subnets.compatible_default.ids) > 0
+      error_message = "No default subnet is available in an Availability Zone that supports the selected instance_type."
+    }
+
     ignore_changes = [
       ami,
       user_data,
