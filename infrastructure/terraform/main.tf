@@ -6,13 +6,17 @@ locals {
 # Security group
 # ---------------------------------------------------------------------------
 resource "aws_security_group" "kind" {
-  name        = local.instance_name
+  name_prefix = "${local.instance_name}-"
   description = "Security group for Kind K8s node running snake-game"
   vpc_id      = data.aws_vpc.default.id
 
   tags = merge(var.tags, {
     Name = local.instance_name
   })
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # SSH
