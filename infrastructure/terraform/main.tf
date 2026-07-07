@@ -81,21 +81,8 @@ resource "aws_key_pair" "kind" {
 # ---------------------------------------------------------------------------
 # EC2 instance
 # ---------------------------------------------------------------------------
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-plucky-26.04-amd64-server-*"]
-  }
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-  owners = ["099720109477"]
+data "aws_ssm_parameter" "ubuntu_ami" {
+  name = "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
 }
 
 data "aws_vpc" "default" {
@@ -110,7 +97,7 @@ data "aws_subnets" "default" {
 }
 
 resource "aws_instance" "kind" {
-  ami                    = data.aws_ami.ubuntu.id
+  ami                    = data.aws_ssm_parameter.ubuntu_ami.value
   instance_type          = var.instance_type
   subnet_id              = data.aws_subnets.default.ids[0]
   key_name               = var.key_name != "" ? var.key_name : aws_key_pair.kind[0].key_name
