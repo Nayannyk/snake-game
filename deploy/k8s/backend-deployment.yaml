@@ -21,6 +21,14 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+      - name: fix-perms
+        image: nayannyk/snake-backend:latest
+        imagePullPolicy: Always
+        command: ["cp", "-r", "/app/.", "/data/"]
+        volumeMounts:
+        - name: app-data
+          mountPath: /data
       containers:
       - name: backend
         image: nayannyk/snake-backend:latest
@@ -32,6 +40,9 @@ spec:
           capabilities:
             drop: ["ALL"]
           readOnlyRootFilesystem: false
+        volumeMounts:
+        - name: app-data
+          mountPath: /app
         env:
         - name: PORT
           value: "3000"
@@ -54,6 +65,9 @@ spec:
             port: 3000
           initialDelaySeconds: 3
           periodSeconds: 5
+      volumes:
+      - name: app-data
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
