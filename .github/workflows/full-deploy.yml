@@ -11,7 +11,7 @@ on:
         required: true
         default: dev
       key_name:
-        description: Existing AWS key pair name (leave empty to auto-generate)
+        description: Existing AWS key pair name (optional; falls back to AWS_KEY_NAME secret)
         required: false
         default: ""
       instance_type:
@@ -159,7 +159,7 @@ jobs:
             chmod 600 /tmp/ssh-key.pem
             echo "file=/tmp/ssh-key.pem" >> "$GITHUB_OUTPUT"
           else
-            echo "No SSH key available — SSH-dependent steps will be skipped"
+            echo "No SSH key available - SSH-dependent steps will be skipped"
           fi
 
       - name: Wait for EC2 + Kind cluster
@@ -267,7 +267,7 @@ jobs:
           if [ -n "${{ steps.ssh.outputs.file }}" ]; then
             echo "| SSH | \`ssh -i <key> ubuntu@${{ steps.ec2.outputs.public_ip }}\` |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| SSH | Skipped (no key available — SSH manually using your key) |" >> $GITHUB_STEP_SUMMARY
+            echo "| SSH | Skipped (no key available - SSH manually using your key) |" >> $GITHUB_STEP_SUMMARY
           fi
           echo "| Image Tag | ${{ env.IMAGE_TAG }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

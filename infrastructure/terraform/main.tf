@@ -65,12 +65,13 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 # ---------------------------------------------------------------------------
 # EC2 instance
 # ---------------------------------------------------------------------------
-locals {
-  ubuntu_ami_id = "ami-01a00762f46d584a1"
-}
 
 data "aws_vpc" "default" {
   default = true
+}
+
+data "aws_ssm_parameter" "ubuntu_ami" {
+  name = "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
 }
 
 data "aws_subnets" "default" {
@@ -81,10 +82,10 @@ data "aws_subnets" "default" {
 }
 
 resource "aws_instance" "kind" {
-  ami                    = local.ubuntu_ami_id
-  instance_type          = var.instance_type
-  subnet_id              = data.aws_subnets.default.ids[0]
-  key_name               = var.key_name
+  ami           = data.aws_ssm_parameter.ubuntu_ami.value
+  instance_type = var.instance_type
+  subnet_id     = data.aws_subnets.default.ids[0]
+  key_name      = var.key_name != "" ? var.key_name : null
 
   vpc_security_group_ids = [aws_security_group.kind.id]
 

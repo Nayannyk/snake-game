@@ -20,7 +20,7 @@ output "security_group_id" {
 
 output "ssh_command" {
   description = "SSH command to connect to the instance"
-  value       = "ssh -i ${var.key_name != "" ? "${var.key_name}.pem" : "snake-game-kind-${var.environment}.pem"} ubuntu@${aws_instance.kind.public_ip}"
+  value       = var.key_name != "" ? "ssh -i ${var.key_name}.pem ubuntu@${aws_instance.kind.public_ip}" : ""
 }
 
 output "game_url" {

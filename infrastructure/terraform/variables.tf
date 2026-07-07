@@ -25,6 +25,7 @@ variable "root_volume_size" {
 variable "key_name" {
   description = "Name of an existing EC2 KeyPair for SSH access"
   type        = string
+  default     = ""
 }
 
 variable "allowed_ssh_cidr" {
