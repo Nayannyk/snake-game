@@ -129,7 +129,7 @@ resource "aws_key_pair" "default" {
 resource "aws_instance" "kind" {
   ami           = data.aws_ssm_parameter.ubuntu_ami.value
   instance_type = var.instance_type
-  subnet_id     = sort(data.aws_subnets.compatible_default.ids)[0]
+  subnet_id     = sort(data.aws_subnets.compatible_default.ids)[length(data.aws_subnets.compatible_default.ids) - 1]
   key_name      = var.key_name != "" ? var.key_name : aws_key_pair.default[0].key_name
 
   vpc_security_group_ids = [aws_security_group.kind.id]
