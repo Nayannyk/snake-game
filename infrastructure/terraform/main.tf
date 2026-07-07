@@ -81,8 +81,8 @@ resource "aws_key_pair" "kind" {
 # ---------------------------------------------------------------------------
 # EC2 instance
 # ---------------------------------------------------------------------------
-data "aws_ssm_parameter" "ubuntu_ami" {
-  name = "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
+locals {
+  ubuntu_ami_id = "ami-01a00762f46d584a1"
 }
 
 data "aws_vpc" "default" {
@@ -97,7 +97,7 @@ data "aws_subnets" "default" {
 }
 
 resource "aws_instance" "kind" {
-  ami                    = data.aws_ssm_parameter.ubuntu_ami.value
+  ami                    = local.ubuntu_ami_id
   instance_type          = var.instance_type
   subnet_id              = data.aws_subnets.default.ids[0]
   key_name               = var.key_name != "" ? var.key_name : aws_key_pair.kind[0].key_name
