@@ -29,12 +29,12 @@ output "game_url" {
 }
 
 output "key_pair_name" {
-  description = "Name of the SSH key pair (existing or generated)"
-  value       = var.key_name != "" ? var.key_name : aws_key_pair.kind[0].key_name
+  description = "Name of the SSH key pair"
+  value       = var.key_name
 }
 
 output "private_key_pem" {
-  description = "Private key PEM (only populated when a new key pair is generated)"
-  value       = var.key_name == "" ? tls_private_key.kind[0].private_key_pem : ""
+  description = "Private key PEM (always empty — user provides their own key via secrets)"
+  value       = ""
   sensitive   = true
 }

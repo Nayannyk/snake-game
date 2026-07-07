@@ -60,27 +60,7 @@ resource "aws_vpc_security_group_egress_rule" "all" {
   description       = "Allow all outbound traffic"
 }
 
-# ---------------------------------------------------------------------------
-# Key pair (generated only if key_name not provided)
-# ---------------------------------------------------------------------------
-resource "tls_private_key" "kind" {
-  count     = var.key_name == "" ? 1 : 0
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
 
-resource "random_id" "key_suffix" {
-  count       = var.key_name == "" ? 1 : 0
-  byte_length = 4
-}
-
-resource "aws_key_pair" "kind" {
-  count      = var.key_name == "" ? 1 : 0
-  key_name   = "${local.instance_name}-${random_id.key_suffix[0].hex}"
-  public_key = tls_private_key.kind[0].public_key_openssh
-
-  tags = var.tags
-}
 
 # ---------------------------------------------------------------------------
 # EC2 instance
@@ -104,7 +84,7 @@ resource "aws_instance" "kind" {
   ami                    = local.ubuntu_ami_id
   instance_type          = var.instance_type
   subnet_id              = data.aws_subnets.default.ids[0]
-  key_name               = var.key_name != "" ? var.key_name : aws_key_pair.kind[0].key_name
+  key_name               = var.key_name
 
   vpc_security_group_ids = [aws_security_group.kind.id]
 
@@ -119,6 +99,10 @@ resource "aws_instance" "kind" {
   tags = merge(var.tags, {
     Name = local.instance_name
   })
+
+  timeouts {
+    create = "10m"
+  }
 
   lifecycle {
     ignore_changes = [
