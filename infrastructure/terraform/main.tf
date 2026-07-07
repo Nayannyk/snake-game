@@ -13,6 +13,10 @@ resource "aws_security_group" "kind" {
   tags = merge(var.tags, {
     Name = local.instance_name
   })
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # SSH
