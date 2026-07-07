@@ -115,10 +115,13 @@ jobs:
           ENV="${{ inputs.environment || needs.setup.outputs.environment }}"
           INST="${{ inputs.instance_type || 't2.medium' }}"
           VARS="-var=environment=${ENV} -var=instance_type=${INST}"
-          if [ -n "${{ inputs.key_name }}" ]; then
-            KEY="${{ inputs.key_name }}"
-            KEY="${KEY%.pem}"
-            VARS="$VARS -var=key_name=$KEY"
+          KEY_NAME="${{ inputs.key_name }}"
+          if [ -z "$KEY_NAME" ]; then
+            KEY_NAME="${{ secrets.AWS_KEY_NAME }}"
+          fi
+          if [ -n "$KEY_NAME" ]; then
+            KEY_NAME="${KEY_NAME%.pem}"
+            VARS="$VARS -var=key_name=$KEY_NAME"
           fi
           echo "value=${VARS}" >> "$GITHUB_OUTPUT"
 
@@ -147,9 +150,9 @@ jobs:
         continue-on-error: true
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          KEY=$(terraform output -raw private_key_pem 2>/dev/null || echo "")
+          KEY="${{ secrets.SSH_PRIVATE_KEY }}"
           if [ -z "$KEY" ]; then
-            KEY="${{ secrets.SSH_PRIVATE_KEY }}"
+            KEY=$(terraform output -raw private_key_pem 2>/dev/null || echo "")
           fi
           if [ -n "$KEY" ]; then
             echo "$KEY" > /tmp/ssh-key.pem
